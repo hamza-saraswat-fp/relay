@@ -38,13 +38,15 @@ policies — only the service role can read/write; all rendering is server-side.
 
 ## Sync (`/api/sync`)
 
-| Trigger | Method | Auth |
-|---|---|---|
-| Vercel Cron (every 6h, `vercel.json`) | GET | `Authorization: Bearer $CRON_SECRET` (Vercel adds this automatically when the `CRON_SECRET` env var is set) |
-| Manual refresh (CS pre-share) | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` |
+| Endpoint | Trigger | Method | Auth |
+|---|---|---|---|
+| `/api/sync` | Vercel Cron (every 6h, `vercel.json`) | GET | `Authorization: Bearer $CRON_SECRET` (Vercel adds this automatically when the `CRON_SECRET` env var is set) |
+| `/api/sync` | Manual refresh (CS pre-share) | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` |
+| `/api/salesforce/case-created` | SF automation on case create (onboarding pattern) | POST | `Authorization: Bearer $SALESFORCE_INTEGRATION_KEY` |
 
-Currently a stub returning **501** — the real sync (bulk SOQL, status mapping, Claude cleaning,
-token minting, SF link write-back) lands with IAI-212 / IAI-214 / IAI-237.
+Both are stubs returning **501**. The real sync (bulk SOQL, status mapping, Claude cleaning) lands
+with IAI-212 / IAI-214; the case-create link endpoint (mint token, return URL, SF writes the field)
+lands with IAI-237.
 
 ## Deploy
 
