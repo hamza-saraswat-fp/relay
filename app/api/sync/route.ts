@@ -1,25 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { runSync } from "@/lib/sync";
+import { getServiceClient } from "@/lib/supabase";
 
 /**
- * Salesforce → Supabase sync endpoint (scaffold — real sync lands with IAI-212).
- *
- * Two triggers, two auth schemes:
- *  - Vercel Cron:      GET  with `Authorization: Bearer ${CRON_SECRET}` (Vercel sends this
- *                      automatically when the CRON_SECRET env var is set)
- *  - Manual refresh:   POST with `x-relay-sync-key: ${RELAY_SYNC_KEY}` (rate limiting
- *                      arrives with IAI-212)
+ * Salesforce → Supabase sync endpoint (IAI-212).
+ *  - Vercel Cron:    GET  with `Authorization: Bearer ${CRON_SECRET}`
+ *  - Manual refresh: POST with `x-relay-sync-key: ${RELAY_SYNC_KEY}` (rate-limited ≥10 min)
  */
 export const maxDuration = 300;
 
+const MANUAL_COOLDOWN_MS = 10 * 60 * 1000;
+
 function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-}
-
-function notImplemented() {
-  return NextResponse.json(
-    { error: "sync not implemented yet — see IAI-212" },
-    { status: 501 }
-  );
 }
 
 export async function GET(req: NextRequest) {
@@ -27,7 +20,8 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return unauthorized();
   }
-  return notImplemented();
+  const result = await runSync();
+  return NextResponse.json(result, { status: result.status === "ok" ? 200 : 500 });
 }
 
 export async function POST(req: NextRequest) {
@@ -35,5 +29,26 @@ export async function POST(req: NextRequest) {
   if (!key || req.headers.get("x-relay-sync-key") !== key) {
     return unauthorized();
   }
-  return notImplemented();
+
+  // Rate limit: reject if any run started within the cooldown window.
+  const supabase = getServiceClient();
+  const { data: recent } = await supabase
+    .from("sync_runs")
+    .select("started_at")
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recent?.started_at) {
+    const age = Date.now() - new Date(recent.started_at as string).getTime();
+    if (age < MANUAL_COOLDOWN_MS) {
+      const retryAfter = Math.ceil((MANUAL_COOLDOWN_MS - age) / 1000);
+      return NextResponse.json(
+        { error: "sync ran recently — try again shortly", retryAfterSeconds: retryAfter },
+        { status: 429 },
+      );
+    }
+  }
+
+  const result = await runSync();
+  return NextResponse.json(result, { status: result.status === "ok" ? 200 : 500 });
 }

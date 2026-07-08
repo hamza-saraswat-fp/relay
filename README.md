@@ -44,9 +44,12 @@ policies — only the service role can read/write; all rendering is server-side.
 | `/api/sync` | Manual refresh (CS pre-share) | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` |
 | `/api/salesforce/case-created` | SF automation on case create (onboarding pattern) | POST | `Authorization: Bearer $SALESFORCE_INTEGRATION_KEY` |
 
-Both are stubs returning **501**. The real sync (bulk SOQL, status mapping, Claude cleaning) lands
-with IAI-212 / IAI-214; the case-create link endpoint (mint token, return URL, SF writes the field)
-lands with IAI-237.
+**Reads use Salesforce Bulk API 2.0** (`lib/salesforce.ts`) — submit query job → poll → download CSV
+— to stay off the org's REST quota. The sync (`lib/sync.ts`, IAI-212) maps status → chip, cleans the
+latest outbound email into a customer update (IAI-214), and upserts into Supabase; it is read-only
+against Salesforce. The case-create endpoint (IAI-237) mints a permanent token per account and returns
+the tracker URL for the SF automation to write into `Relay_Tracker_Link__c` — **new cases only, no
+backfill**. Live runs need the Supabase + Salesforce sandbox credentials.
 
 ## Deploy
 
