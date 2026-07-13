@@ -19,13 +19,27 @@ export interface SyncResult {
   error?: string;
 }
 
-function caseSoql(since: string | null): string {
-  const base =
+/** Salesforce record ids are 15 or 18 case-sensitive alphanumeric chars. Guards the SOQL IN() list
+ *  against a malformed id (e.g. a leftover seed row) that would otherwise fail the whole Bulk query. */
+function isSalesforceId(id: string): boolean {
+  return /^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$/.test(id);
+}
+
+/**
+ * Cases for accounts we already track. Scope is strict event-only: an account enters Relay only
+ * via the case-created endpoint, so the sync reads cases only for known accounts and never
+ * introduces new ones. We pull each known account's full current open set (+ closed in the last
+ * 30 days) every run rather than a LastModifiedDate delta — the known-account set is small under
+ * event-only onboarding, and a delta would miss a newly-added account's older-but-still-open cases.
+ */
+function caseSoql(accountIds: string[]): string {
+  const ids = accountIds.map((id) => `'${id}'`).join(",");
+  return (
     `SELECT Id, CaseNumber, Subject, Status, CreatedDate, ClosedDate, LastModifiedDate, ` +
     `IsClosed, Resolution__c, AccountId, Account.Name, Account.ParentId ` +
-    `FROM Case WHERE Type IN ${CASE_TYPES} AND AccountId != null ` +
-    `AND (IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`;
-  return since ? `${base} AND LastModifiedDate >= ${since}` : base;
+    `FROM Case WHERE Type IN ${CASE_TYPES} AND AccountId IN (${ids}) ` +
+    `AND (IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`
+  );
 }
 
 function emailSoql(caseIds: string[]): string {
@@ -60,14 +74,19 @@ function stripHtml(s: string): string {
 export async function runSync(): Promise<SyncResult> {
   const supabase = getServiceClient();
 
-  const { data: lastRun } = await supabase
-    .from("sync_runs")
-    .select("finished_at")
-    .eq("status", "ok")
-    .order("finished_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const since = (lastRun?.finished_at as string | undefined) ?? null;
+  // Strict event-only: the sync operates ONLY on accounts already minted via the case-created
+  // endpoint. It never creates accounts (that would be a backfill). If none exist yet, there is
+  // nothing to sync.
+  const { data: knownAccts, error: knownErr } = await supabase
+    .from("accounts")
+    .select("id, sf_account_id");
+  if (knownErr) {
+    return { status: "error", casesUpserted: 0, accountsUpserted: 0, error: knownErr.message };
+  }
+  const acctIdBySf = new Map((knownAccts ?? []).map((a) => [a.sf_account_id as string, a.id as string]));
+  const knownSf = [...acctIdBySf.keys()].filter(isSalesforceId);
+  const skipped = acctIdBySf.size - knownSf.length;
+  if (skipped) console.warn(`[relay] sync: skipping ${skipped} account(s) with malformed sf_account_id`);
 
   const { data: run } = await supabase
     .from("sync_runs")
@@ -77,10 +96,24 @@ export async function runSync(): Promise<SyncResult> {
   const runId = run?.id as string | undefined;
 
   try {
-    // 1. Pull cases.
-    const caseRows = await runBulkQuery(caseSoql(since));
+    // No tracked accounts yet → nothing to pull. Finish the run cleanly.
+    if (knownSf.length === 0) {
+      if (runId) {
+        await supabase
+          .from("sync_runs")
+          .update({ finished_at: new Date().toISOString(), cases_upserted: 0, status: "ok" })
+          .eq("id", runId);
+      }
+      return { status: "ok", casesUpserted: 0, accountsUpserted: 0 };
+    }
 
-    // 2. Upsert accounts, get back id ↔ sf_account_id (tokens are minted by the DB default; never touched here).
+    // 1. Pull cases for known accounts only; guard against any stray non-tracked account.
+    const knownSet = new Set(knownSf);
+    const rawCaseRows = await runBulkQuery(caseSoql(knownSf));
+    const caseRows = rawCaseRows.filter((c) => knownSet.has(c.AccountId));
+
+    // 2. Refresh tracked accounts' name/parent. Update-only: every AccountId here is already known,
+    //    so this upsert can never insert a new account. Tokens are DB-minted and never touched here.
     const accountsBySf = new Map<string, Record<string, string>>();
     for (const c of caseRows) accountsBySf.set(c.AccountId, c);
     const accountUpserts = [...accountsBySf.values()].map((c) => ({
@@ -89,12 +122,12 @@ export async function runSync(): Promise<SyncResult> {
       parent_sf_id: c["Account.ParentId"] || null,
       updated_at: new Date().toISOString(),
     }));
-    const { data: accts, error: acctErr } = await supabase
-      .from("accounts")
-      .upsert(accountUpserts, { onConflict: "sf_account_id" })
-      .select("id, sf_account_id");
-    if (acctErr) throw acctErr;
-    const acctIdBySf = new Map((accts ?? []).map((a) => [a.sf_account_id as string, a.id as string]));
+    if (accountUpserts.length) {
+      const { error: acctErr } = await supabase
+        .from("accounts")
+        .upsert(accountUpserts, { onConflict: "sf_account_id" });
+      if (acctErr) throw acctErr;
+    }
 
     // 3. Latest outbound email per changed case (for the "latest update").
     const caseIds = caseRows.map((c) => c.Id);
