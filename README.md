@@ -9,8 +9,8 @@ every 6 hours — page loads never touch the Salesforce API.
 
 ## Stack
 
-Next.js (App Router) on Vercel · Supabase (Postgres, service-role only) · Anthropic API (update
-cleaning + safety pass) · Salesforce REST (bulk SOQL reads + one Account-field write per new account).
+Next.js (App Router) on Vercel · Supabase (Postgres, service-role only) · OpenRouter (Claude Sonnet 5
+— update cleaning + safety pass) · Salesforce REST (bulk SOQL reads + one Account-field write per new account).
 
 ## Local setup
 

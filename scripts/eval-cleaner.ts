@@ -3,14 +3,14 @@
  * Runs every fixture through cleanUpdate() and prints raw → cleaned + safety flag
  * for human review. Also checks that `mustFlag` fixtures actually tripped the gate.
  *
- * Run: ANTHROPIC_API_KEY=... npm run eval:cleaner
+ * Run: OPENROUTER_API_KEY=... npm run eval:cleaner
  */
 import { cleanUpdate } from "../lib/update-cleaner";
 import { EMAIL_FIXTURES } from "../lib/fixtures/emails";
 
 async function main() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY not set — cannot run the cleaner. Aborting.");
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error("OPENROUTER_API_KEY not set — cannot run the cleaner. Aborting.");
     process.exit(1);
   }
 

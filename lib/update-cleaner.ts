@@ -1,14 +1,14 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { requireEnv } from "./env";
 
 /**
  * Turn a support agent's raw outbound email into a short, customer-facing
  * status update for the PUBLIC ticket page — with a safety gate.
  *
- * IAI-214. Model: Haiku 4.5 (cheap/fast) — no `effort`/`thinking` (Haiku rejects effort).
+ * IAI-214. Model: Claude Sonnet 5 via OpenRouter (OpenAI-compatible chat API).
  */
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "anthropic/claude-sonnet-5";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const SAFE_FALLBACK =
   "Our team posted an update on this ticket — check your email thread for details.";
@@ -17,12 +17,6 @@ export interface CleanResult {
   cleaned: string;
   safetyFlag: boolean;
   model: string;
-}
-
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: requireEnv("ANTHROPIC_API_KEY") });
-  return client;
 }
 
 const SYSTEM = `You convert a support agent's raw outbound email into a short, customer-facing status update for a PUBLIC ticket status page.
@@ -51,19 +45,44 @@ export async function cleanUpdate(rawEmail: string): Promise<CleanResult> {
     return { cleaned: SAFE_FALLBACK, safetyFlag: false, model: MODEL };
   }
 
-  const response = await getClient().messages.create({
-    model: MODEL,
-    max_tokens: 500,
-    system: SYSTEM,
-    messages: [{ role: "user", content: rawEmail }],
-  });
+  // Throws if unconfigured — a real misconfig should surface, not silently fall back.
+  const apiKey = requireEnv("OPENROUTER_API_KEY");
 
-  // Fail closed: anything unexpected → safe fallback, never raw email text.
-  if (response.stop_reason === "refusal") {
+  let res: Response;
+  try {
+    res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "X-Title": "Relay",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 500,
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: rawEmail },
+        ],
+      }),
+    });
+  } catch {
+    // Network error → fail closed, never surface raw email text. Next sync re-attempts.
     return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
   }
-  const textBlock = response.content.find((b) => b.type === "text");
-  const parsed = textBlock && "text" in textBlock ? extractJson(textBlock.text) : null;
+
+  // Fail closed: anything unexpected → safe fallback, never raw email text.
+  if (!res.ok) {
+    return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string; refusal?: string } }[];
+  };
+  const message = data.choices?.[0]?.message;
+  if (!message || message.refusal) {
+    return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
+  }
+  const parsed = typeof message.content === "string" ? extractJson(message.content) : null;
   if (!parsed || typeof parsed.cleaned !== "string" || parsed.sensitive === undefined) {
     return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
   }
