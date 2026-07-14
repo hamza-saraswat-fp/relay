@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bluebird Plumbing &amp; Air · FieldPulse Support Status</title>
+<link rel="icon" href="../public/brand/fp_icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#00034d; --cobalt:#253e9a; --sky:#6183d8; --aqua:#6cb4e4; --quartz:#8b8ed6;
+    --amber:#f2a13c; --amber-deep:#d98324; --green:#43c98a;
+    --panel:#0a0f57; --panel-2:#111664; --panel-line:#26307e;
+    --ink:#eef1ff; --ink-2:#aeb6ee; --ink-3:#7b83c8;
+    --sans:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(1100px 620px at 88% -8%, rgba(108,180,228,.20), rgba(108,180,228,0) 60%),
+      radial-gradient(900px 500px at 6% 4%, rgba(37,62,154,.35), rgba(37,62,154,0) 55%),
+      #00022f;
+    background-attachment:fixed;
+  }
+  body::before{ /* dot grid */
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:radial-gradient(rgba(139,142,214,.16) 1px, transparent 1px);
+    background-size:26px 26px;mask-image:linear-gradient(180deg,#000 0%,#000 60%,transparent 100%);
+  }
+  .shell{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 26px 90px}
+
+  /* top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:22px 0 0}
+  .topbar img{height:22px;display:block}
+  .tb-right{display:flex;align-items:center;gap:16px}
+  .live{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12px;font-weight:600;
+    letter-spacing:.14em;color:var(--aqua);background:rgba(108,180,228,.09);border:1px solid rgba(108,180,228,.32);
+    padding:7px 13px;border-radius:999px}
+  .live .beacon{position:relative;width:9px;height:9px}
+  .live .beacon i{position:absolute;inset:0;border-radius:50%;background:var(--aqua)}
+  .live .beacon i::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--aqua);
+    animation:ripple 2s ease-out infinite}
+  @keyframes ripple{0%{transform:scale(1);opacity:.7}100%{transform:scale(3.4);opacity:0}}
+  .secure{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+  .secure svg{width:12px;height:12px;opacity:.8}
+
+  /* ticker */
+  .ticker{margin-top:18px;border-top:1px solid var(--panel-line);border-bottom:1px solid var(--panel-line);
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;color:var(--ink-3);
+    display:flex;gap:26px;padding:9px 2px;overflow:hidden;white-space:nowrap}
+  .ticker b{color:var(--aqua);font-weight:600}
+  .ticker span{color:var(--quartz)}
+
+  /* hero */
+  .hero{padding:46px 0 8px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;color:var(--sky);text-transform:uppercase;margin-bottom:20px}
+  h1{font-size:clamp(38px,7vw,72px);font-weight:900;letter-spacing:-.03em;line-height:.94;text-transform:uppercase;margin:0;
+    background:linear-gradient(180deg,#fff, #c9d2ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .asof{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--ink-3);letter-spacing:.04em}
+
+  /* stat tiles */
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:30px}
+  @media(max-width:760px){.tiles{grid-template-columns:1fr 1fr}}
+  .tile{background:linear-gradient(180deg,var(--panel),rgba(10,15,87,.55));border:1px solid var(--panel-line);
+    border-radius:14px;padding:16px 16px 15px;position:relative;overflow:hidden}
+  .tile .cap{position:absolute;top:0;left:0;right:0;height:3px}
+  .tile .n{font-size:40px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+  .tile .l{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--ink-2);text-transform:uppercase;margin-top:9px}
+  .tile.you .n{color:var(--amber)} .tile.you .cap{background:var(--amber)}
+  .tile.open .n{color:#fff} .tile.open .cap{background:var(--sky)}
+  .tile.motion .n{color:var(--aqua)} .tile.motion .cap{background:var(--aqua)}
+  .tile.cleared .n{color:var(--green)} .tile.cleared .cap{background:var(--green)}
+
+  /* action banner */
+  .banner{margin-top:26px;display:flex;gap:14px;align-items:center;
+    background:linear-gradient(90deg, rgba(242,161,60,.14), rgba(242,161,60,.04));
+    border:1px solid rgba(242,161,60,.4);border-radius:14px;padding:15px 18px}
+  .banner .pin{width:11px;height:11px;border-radius:50%;background:var(--amber);flex:none;box-shadow:0 0 0 0 rgba(242,161,60,.6);animation:pin 2.2s infinite}
+  @keyframes pin{0%{box-shadow:0 0 0 0 rgba(242,161,60,.55)}70%{box-shadow:0 0 0 12px rgba(242,161,60,0)}100%{box-shadow:0 0 0 0 rgba(242,161,60,0)}}
+  .banner p{margin:0;font-size:14.5px;color:#fde7c8}
+  .banner b{color:#fff;font-weight:700}
+
+  /* board */
+  .board-h{display:flex;align-items:center;gap:14px;margin:52px 0 4px}
+  .board-h .t{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)}
+  .board-h .rule{height:1px;background:var(--panel-line);flex:1}
+  .board-h .scan{font-family:var(--mono);font-size:11px;color:var(--aqua);letter-spacing:.1em}
+
+  .cols{display:grid;grid-template-columns:150px 1fr 108px 108px 96px 34px;gap:14px;padding:12px 16px;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+  @media(max-width:760px){.cols{display:none}}
+
+  /* Rows are visible by default; motion lives in the live indicators, not here,
+     so content never depends on an animation having run. */
+  .row{display:block;background:rgba(10,15,87,.42);border:1px solid var(--panel-line);border-radius:13px;margin-bottom:9px;overflow:hidden;
+    transition:border-color .2s, transform .2s, background .2s}
+  .row summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:150px 1fr 108px 108px 96px 34px;gap:14px;
+    align-items:center;padding:16px;user-select:none}
+  .row summary::-webkit-details-marker{display:none}
+  .row:hover{border-color:#38449e;background:rgba(17,22,100,.6)}
+  .row.attn{border-color:rgba(242,161,60,.5);background:linear-gradient(90deg, rgba(242,161,60,.08), rgba(10,15,87,.42) 55%)}
+  .row.attn:hover{border-color:rgba(242,161,60,.75)}
+
+  .gate{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    padding:7px 10px;border-radius:8px;text-align:center;border:1px solid;white-space:nowrap}
+  .gate.you{color:#1c0d00;background:var(--amber);border-color:var(--amber)}
+  .gate.support{color:#cdd8ff;background:rgba(37,62,154,.5);border-color:#3a49a6}
+  .gate.progress{color:#d5e6ff;background:rgba(97,131,216,.22);border-color:rgba(97,131,216,.6)}
+  .gate.resolved{color:#bff2da;background:rgba(67,201,138,.16);border-color:rgba(67,201,138,.5)}
+
+  .tk-wrap{display:block;min-width:0}
+  .tk-sub{display:block;font-size:15.5px;font-weight:600;color:#fff;line-height:1.3}
+  .tk-id{display:block;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:5px;letter-spacing:.05em}
+  .cell{font-family:var(--mono);font-size:12px;color:var(--ink-2);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .wait{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em}
+  .wait.you{color:var(--amber)} .wait.fp{color:var(--ink-3)}
+  .chev{justify-self:end;width:26px;height:26px;border-radius:50%;border:1px solid var(--panel-line);
+    display:grid;place-items:center;color:var(--ink-2);font-size:11px;transition:transform .25s, background .2s}
+  .row[open] .chev{transform:rotate(180deg);background:rgba(108,180,228,.14)}
+
+  .drawer{border-top:1px solid var(--panel-line);padding:18px 16px 20px;background:rgba(3,6,54,.5)}
+  .tx-lab{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--aqua);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .tx-lab::before{content:"";width:14px;height:1px;background:var(--aqua)}
+  .tx{font-size:14.5px;line-height:1.7;color:#e7ebff;background:rgba(10,15,87,.6);border:1px solid var(--panel-line);
+    border-left:3px solid var(--sky);border-radius:10px;padding:14px 16px}
+  .facts{display:flex;flex-wrap:wrap;gap:26px;margin-top:16px}
+  .facts .f .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+  .facts .f .v{font-family:var(--mono);font-size:12.5px;color:var(--ink);margin-top:3px}
+
+  /* mobile stack */
+  @media(max-width:760px){
+    .row summary{grid-template-columns:1fr auto;gap:10px}
+    .row .cell,.row .wait{display:none}
+    .tk-wrap{order:2;grid-column:1/2}
+    .gate{order:1;grid-column:1/2;justify-self:start}
+    .chev{order:3;grid-column:2/3;grid-row:1/3}
+  }
+
+  /* resolved */
+  details.rez{margin-top:26px}
+  details.rez>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);padding:10px 2px}
+  details.rez>summary::-webkit-details-marker{display:none}
+  details.rez .rcount{color:var(--green);border:1px solid rgba(67,201,138,.4);border-radius:999px;padding:2px 10px;font-size:10.5px}
+  details.rez[open] .rchev{transform:rotate(180deg)}
+  .rchev{transition:transform .25s;display:inline-block}
+
+  /* footer */
+  .foot{margin-top:60px;border:1px solid var(--panel-line);border-radius:18px;padding:26px 26px;position:relative;overflow:hidden;
+    background:linear-gradient(180deg, rgba(10,15,87,.5), rgba(3,6,54,.3))}
+  .foot .glow{position:absolute;right:-80px;bottom:-120px;width:340px;height:340px;border-radius:50%;
+    background:radial-gradient(circle,rgba(108,180,228,.22),transparent 62%)}
+  .foot h4{margin:0 0 8px;font-size:16px;color:#fff}
+  .foot p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.7;max-width:60ch}
+  .foot a{color:var(--aqua);text-decoration:none;font-weight:600}
+  .foot .fine{margin-top:16px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.05em}
+
+  @media (prefers-reduced-motion:reduce){
+    .live .beacon i::after,.banner .pin{animation:none}
+  }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <img src="../public/brand/white_logo.svg" alt="FieldPulse" />
+      <div class="tb-right">
+        <span class="live"><span class="beacon"><i></i></span>LIVE</span>
+        <span class="secure">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          SECURE LINK
+        </span>
+      </div>
+    </div>
+
+    <div class="ticker">
+      <span><b>AUTO-SYNC</b> ENABLED</span>
+      <span>LAST REFRESH · 12 JUN 2026 14:02</span>
+      <span>NEXT PULSE · 6H</span>
+      <span>SOURCE · FIELDPULSE SUPPORT</span>
+      <span>MODE · READ-ONLY</span>
+    </div>
+
+    <header class="hero">
+      <div class="eyebrow">Technical Support · Status Board</div>
+      <h1>Bluebird Plumbing &amp; Air</h1>
+      <div class="asof">Board reflects live ticket status. Updated 12 Jun 2026. Refreshes automatically.</div>
+
+      <div class="tiles">
+        <div class="tile open"><span class="cap"></span><div class="n">04</div><div class="l">Open tickets</div></div>
+        <div class="tile you"><span class="cap"></span><div class="n">01</div><div class="l">Needs you</div></div>
+        <div class="tile motion"><span class="cap"></span><div class="n">03</div><div class="l">In motion</div></div>
+        <div class="tile cleared"><span class="cap"></span><div class="n">03</div><div class="l">Cleared · 30d</div></div>
+      </div>
+
+      <div class="banner">
+        <span class="pin"></span>
+        <p><b>One ticket is waiting on you.</b> Our team is paused on it until we hear back. Reply to that ticket's email thread and it releases straight back into motion.</p>
+      </div>
+    </header>
+
+    <div class="board-h">
+      <span class="t">Open · Departures board</span>
+      <span class="rule"></span>
+      <span class="scan">4 ACTIVE</span>
+    </div>
+
+    <div class="cols">
+      <div>Status</div><div>Ticket</div><div>Opened</div><div>Last ping</div><div>Waiting on</div><div></div>
+    </div>
+
+    <!-- waiting_for_you -->
+    <details class="row attn" open style="animation-delay:.05s">
+      <summary>
+        <span class="gate you">Action needed</span>
+        <span class="tk-wrap"><span class="tk-sub">Invoice #70593 not syncing to QuickBooks</span><span class="tk-id">FP-70593</span></span>
+        <span class="cell">15 JAN 2026</span>
+        <span class="cell">10 JUN 2026</span>
+        <span class="wait you">YOU</span>
+        <span class="chev">&#9662;</span>
+      </summary>
+      <div class="drawer">
+        <div class="tx-lab">Latest transmission from our team</div>
+        <div class="tx">We traced the sync failure to a mismatched tax mapping on this invoice. We have sent over two questions about how your QuickBooks tax codes are set up. Once we hear back, the fix is ready to apply on our side.</div>
+        <div class="facts">
+          <div class="f"><div class="k">Opened</div><div class="v">15 JAN 2026</div></div>
+          <div class="f"><div class="k">Last activity</div><div class="v">10 JUN 2026</div></div>
+          <div class="f"><div class="k">Waiting on</div><div class="v" style="color:var(--amber)">YOU</div></div>
+        </div>
+      </div>
+    </details>
+
+    <!-- in_progress -->
+    <details class="row" style="animation-delay:.12s">
+      <summary>
+        <span class="gate progress">In progress</span>
+        <span class="tk-wrap"><span class="tk-sub">Arrival window time changes after saving a job</span><span class="tk-id">FP-71204</span></span>
+        <span class="cell">28 APR 2026</span>
+        <span class="cell">09 JUN 2026</span>
+        <span class="wait fp">FIELDPULSE</span>
+        <span class="chev">&#9662;</span>
+      </summary>
+      <div class="drawer">
+        <div class="tx-lab">Latest transmission from our team</div>
+        <div class="tx">We reproduced this with your timezone settings and confirmed it is a defect, not a configuration issue. A fix is being tested now, and we expect an update for you within the week.</div>
+        <div class="facts">
+          <div class="f"><div class="k">Opened</div><div class="v">28 APR 2026</div></div>
+          <div class="f"><div class="k">Last activity</div><div class="v">09 JUN 2026</div></div>
+          <div class="f"><div class="k">Waiting on</div><div class="v">FieldPulse</div></div>
+        </div>
+      </div>
+    </details>
+
+    <!-- in_progress -->
+    <details class="row" style="animation-delay:.19s">
+      <summary>
+        <span class="gate progress">In progress</span>
+        <span class="tk-wrap"><span class="tk-sub">Purchase orders not syncing for inventory-tracked items</span><span class="tk-id">FP-71660</span></span>
+        <span class="cell">05 MAY 2026</span>
+        <span class="cell">06 JUN 2026</span>
+        <span class="wait fp">FIELDPULSE</span>
+        <span class="chev">&#9662;</span>
+      </summary>
+      <div class="drawer">
+        <div class="tx-lab">Latest transmission from our team</div>
+        <div class="tx">This is with our engineering team. The root cause is on the integration side, so the fix requires a code change rather than a settings adjustment. It is scheduled into the current engineering cycle.</div>
+        <div class="facts">
+          <div class="f"><div class="k">Opened</div><div class="v">05 MAY 2026</div></div>
+          <div class="f"><div class="k">Last activity</div><div class="v">06 JUN 2026</div></div>
+          <div class="f"><div class="k">Waiting on</div><div class="v">FieldPulse</div></div>
+        </div>
+      </div>
+    </details>
+
+    <!-- waiting_for_support -->
+    <details class="row" style="animation-delay:.26s">
+      <summary>
+        <span class="gate support">In queue</span>
+        <span class="tk-wrap"><span class="tk-sub">Commission report excluding invoices in "sent" status</span><span class="tk-id">FP-72015</span></span>
+        <span class="cell">11 JUN 2026</span>
+        <span class="cell">11 JUN 2026</span>
+        <span class="wait fp">FIELDPULSE</span>
+        <span class="chev">&#9662;</span>
+      </summary>
+      <div class="drawer">
+        <div class="tx-lab">Latest transmission from our team</div>
+        <div class="tx">Your ticket is in our specialist queue. A reviewer is confirming whether this is expected report behavior or a defect, and you will see the first determination here.</div>
+        <div class="facts">
+          <div class="f"><div class="k">Opened</div><div class="v">11 JUN 2026</div></div>
+          <div class="f"><div class="k">Last activity</div><div class="v">11 JUN 2026</div></div>
+          <div class="f"><div class="k">Waiting on</div><div class="v">FieldPulse</div></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="rez">
+      <summary><span class="rchev">&#9662;</span> Cleared · last 30 days <span class="rcount">3 RESOLVED</span></summary>
+
+      <details class="row" style="animation:none;opacity:1;transform:none;margin-top:10px">
+        <summary>
+          <span class="gate resolved">Cleared</span>
+          <span class="tk-wrap"><span class="tk-sub">Duplicate charge appearing on customer payment</span><span class="tk-id">FP-71330</span></span>
+          <span class="cell">28 MAY 2026</span>
+          <span class="cell">28 MAY 2026</span>
+          <span class="wait fp">CLOSED</span>
+          <span class="chev">&#9662;</span>
+        </summary>
+        <div class="drawer">
+          <div class="tx-lab">Resolution</div>
+          <div class="tx">The duplicate was a display issue only. Your customer was charged once. We corrected the payment record and verified the amounts match your processor statement.</div>
+        </div>
+      </details>
+
+      <details class="row" style="animation:none;opacity:1;transform:none">
+        <summary>
+          <span class="gate resolved">Cleared</span>
+          <span class="tk-wrap"><span class="tk-sub">Technicians unable to add materials from mobile app</span><span class="tk-id">FP-71288</span></span>
+          <span class="cell">19 MAY 2026</span>
+          <span class="cell">19 MAY 2026</span>
+          <span class="wait fp">CLOSED</span>
+          <span class="chev">&#9662;</span>
+        </summary>
+        <div class="drawer">
+          <div class="tx-lab">Resolution</div>
+          <div class="tx">A permissions setting was limiting material-list access for two technician accounts. We updated the user roles and confirmed both techs can now add materials.</div>
+        </div>
+      </details>
+
+      <details class="row" style="animation:none;opacity:1;transform:none">
+        <summary>
+          <span class="gate resolved">Cleared</span>
+          <span class="tk-wrap"><span class="tk-sub">Recurring invoice not sending for maintenance agreement</span><span class="tk-id">FP-71190</span></span>
+          <span class="cell">30 APR 2026</span>
+          <span class="cell">15 MAY 2026</span>
+          <span class="wait fp">CLOSED</span>
+          <span class="chev">&#9662;</span>
+        </summary>
+        <div class="drawer">
+          <div class="tx-lab">Resolution</div>
+          <div class="tx">The agreement's billing schedule had an end date in the past, which stopped the invoices. We corrected the schedule, the missed invoice went out the same day, and future runs are confirmed.</div>
+        </div>
+      </details>
+    </details>
+
+    <div class="foot">
+      <div class="glow"></div>
+      <h4>Questions about a ticket?</h4>
+      <p>Reply to the email thread you already have with our support team. Every ticket on this board links back to its original conversation, so you never lose the context. General support: <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a></p>
+      <div class="fine">THIS BOARD IS READ-ONLY · UPDATES AUTOMATICALLY FROM FIELDPULSE SUPPORT · LINK IS PRIVATE TO YOUR ACCOUNT</div>
+    </div>
+  </div>
+</body>
+</html>

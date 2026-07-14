@@ -1,0 +1,108 @@
+/*
+ * FieldPulse brand tokens — the single source of truth for color, elevation,
+ * radius, and type hooks used across Relay. Import once at the root layout.
+ *
+ * Palette source: FieldPulse brand kit (fp_brand). Core brand hues plus the
+ * tints/shades and semantic aliases the product UI actually needs. See
+ * docs/brand-guidelines.md for usage rules and the /design UI kit for a
+ * rendered reference.
+ */
+
+:root {
+  /* ----------  Core brand palette (do not alter the hex values)  ---------- */
+  --fp-navy: #00034d;
+  --fp-cobalt: #253e9a;
+  --fp-sky: #6183d8;
+  --fp-aqua: #6cb4e4;
+  --fp-quartz: #8b8ed6;
+  --fp-fog: #e2e2e2;
+
+  /* ----------  Navy ink scale (text + neutrals, all navy-derived)  ---------- */
+  --fp-ink: #00034d;          /* primary text on light */
+  --fp-ink-2: #23264f;        /* secondary text */
+  --fp-ink-3: #4a4d70;        /* muted text */
+  --fp-ink-4: #71749a;        /* faint text, meta */
+  --fp-line: #e3e5f0;         /* hairline borders */
+  --fp-line-2: #eef0f7;       /* softest dividers */
+  --fp-surface: #ffffff;      /* cards */
+  --fp-surface-2: #f6f7fc;    /* raised / inset panels */
+  --fp-bg: #f8f9fd;           /* page background (cool off-white) */
+
+  /* ----------  Brand tints (pale fills for chips, panels, wells)  ---------- */
+  --fp-navy-050: #eaebf4;
+  --fp-navy-100: #d4d6e8;
+  --fp-cobalt-050: #eaeef8;
+  --fp-cobalt-100: #ccd4ef;
+  --fp-sky-050: #edf2fc;
+  --fp-sky-100: #cedcf4;
+  --fp-aqua-050: #e8f3fb;
+  --fp-aqua-100: #c5e3f5;
+  --fp-quartz-050: #efeffb;
+  --fp-quartz-100: #d8d9f1;
+
+  /* ----------  Functional colors (semantic, outside core palette)  ---------- */
+  /* Green reads universally as "done"; tuned cool to sit beside navy. */
+  --fp-success: #1e7a57;
+  --fp-success-050: #e6f2ec;
+  --fp-success-100: #c2ded1;
+  /* Warm attention accent, used sparingly for the single "your move" state. */
+  --fp-attention: #d98324;
+  --fp-attention-050: #fbf1e3;
+  --fp-attention-100: #f2d9b4;
+
+  /* ----------  Status semantics (canonical mapping)  ---------- */
+  /* waiting_for_you  = customer action needed -> highest attention */
+  --fp-status-you: var(--fp-attention);
+  --fp-status-you-bg: var(--fp-attention-050);
+  --fp-status-you-line: var(--fp-attention-100);
+  /* waiting_for_support = queued with us */
+  --fp-status-support: var(--fp-cobalt);
+  --fp-status-support-bg: var(--fp-cobalt-050);
+  --fp-status-support-line: var(--fp-cobalt-100);
+  /* in_progress = actively being worked */
+  --fp-status-progress: var(--fp-sky);
+  --fp-status-progress-bg: var(--fp-sky-050);
+  --fp-status-progress-line: var(--fp-sky-100);
+  /* resolved = done */
+  --fp-status-resolved: var(--fp-success);
+  --fp-status-resolved-bg: var(--fp-success-050);
+  --fp-status-resolved-line: var(--fp-success-100);
+
+  /* ----------  Elevation  ---------- */
+  --fp-shadow-sm: 0 1px 2px rgba(0, 3, 77, 0.06);
+  --fp-shadow-md: 0 6px 20px -6px rgba(0, 3, 77, 0.14);
+  --fp-shadow-lg: 0 24px 60px -20px rgba(0, 3, 77, 0.28);
+  --fp-ring: 0 0 0 3px rgba(108, 180, 228, 0.45);
+
+  /* ----------  Radius  ---------- */
+  --fp-r-sm: 8px;
+  --fp-r-md: 12px;
+  --fp-r-lg: 18px;
+  --fp-r-xl: 26px;
+  --fp-r-pill: 999px;
+
+  /* ----------  Type hooks (Montserrat brand font via next/font in app/layout.tsx)  ---------- */
+  --fp-font-sans: var(--font-montserrat), -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --fp-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --fp-font-display: var(--font-montserrat), "Segoe UI", system-ui, sans-serif;
+}
+
+/* Minimal reset so the app inherits brand defaults. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fp-bg);
+  color: var(--fp-ink);
+  font-family: var(--fp-font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

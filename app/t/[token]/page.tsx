@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
+import type { ReactElement } from "react";
 import { getAccountView } from "@/lib/data";
-import { CHIP_LABEL, type AccountView, type StatusChip, type Ticket } from "@/lib/types";
+import { type AccountView, type StatusChip, type Ticket } from "@/lib/types";
 import styles from "./tracker.module.css";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +18,55 @@ function fmtDate(iso: string): string {
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
-function waitingOn(chip: StatusChip): string {
-  return chip === "waiting_for_you" ? "You" : "FieldPulse";
+// Status icons — one bespoke glyph per state rather than a generic marker, so
+// each chip reads at a glance without leaning on color alone.
+function IconReply() {
+  return (
+    <svg className={styles.chipIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="9 14 4 9 9 4" />
+      <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+    </svg>
+  );
+}
+function IconProgress() {
+  return (
+    <svg className={styles.chipIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <path d="M21 12a9 9 0 1 1-3-6.7" />
+    </svg>
+  );
+}
+function IconClock() {
+  return (
+    <svg className={styles.chipIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+function IconCheck() {
+  return (
+    <svg className={styles.chipIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+// Disclosure chevron: sideways when collapsed, rotates to point down when open
+// (styles.rez[open] .rchev handles the rotation).
+function IconChevron() {
+  return (
+    <svg className={styles.rchev} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
 }
 
-function chipClass(chip: StatusChip): string {
-  return styles[`chip_${chip}`] ?? "";
-}
+// Plain-English status, one per ticket: whose ball is it, in the brand's colors.
+const STATUS: Record<StatusChip, { label: string; cls: string; Icon: () => ReactElement }> = {
+  waiting_for_you: { label: "Needs your reply", cls: "chip_you", Icon: IconReply },
+  in_progress: { label: "Our team is on it", cls: "chip_working", Icon: IconProgress },
+  waiting_for_support: { label: "In our support queue", cls: "chip_queued", Icon: IconClock },
+  resolved: { label: "Resolved", cls: "chip_resolved", Icon: IconCheck },
+};
 
 export default async function TrackerPage({
   params,
@@ -52,127 +95,117 @@ export default async function TrackerPage({
   const needsResponse = open.filter((t) => t.chip === "waiting_for_you").length;
 
   return (
-    <main className={styles.wrap}>
-      <div className={styles.topbar}>
-        <div className={styles.brand}>
-          <span className={styles.badge}>FP</span> FieldPulse{" "}
-          <span className={styles.brandMuted}>· Support Status</span>
-        </div>
-        <div className={styles.verified}>verified link</div>
-      </div>
-
-      <header className={styles.hero}>
-        <div className={styles.eyebrow}>Technical Support — Status Report</div>
-        <h1 className={styles.h1}>{account.name}</h1>
-        <div className={styles.statline}>
-          <span className={styles.stat}>
-            <b>{open.length}</b> open ticket{open.length !== 1 ? "s" : ""}
+    <main className={styles.page}>
+      <div className={styles.wrap}>
+        <header className={styles.bar}>
+          <div className={styles.brandGroup}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className={styles.logo} src="/brand/navy_logo.svg" alt="FieldPulse" />
+            <span className={styles.barDivider} aria-hidden />
+            <span className={styles.barLabel}>Ticket Tracker</span>
+          </div>
+          <span className={styles.synced}>
+            <span className={styles.pulse}><i /></span>Synced live
           </span>
-          {needsResponse > 0 && (
-            <span className={`${styles.stat} ${styles.statAccent}`}>
-              <b>{needsResponse}</b> need{needsResponse !== 1 ? "" : "s"} your response
-            </span>
-          )}
-          <span className={`${styles.stat} ${styles.statGreen}`}>
-            <b>{resolved.length}</b> resolved · last 30 days
-          </span>
-        </div>
-        <div className={styles.asof}>
-          Updated {fmtDate(account.lastUpdatedISO)} · refreshes automatically
-        </div>
+        </header>
 
-        {needsResponse > 0 && (
-          <div className={styles.callout}>
-            <span className={styles.calloutDot} />
-            <p>
-              <b>
-                {needsResponse === 1
-                  ? "One ticket is waiting on your response."
-                  : `${needsResponse} tickets are waiting on your response.`}
-              </b>{" "}
-              Our team is paused until we hear back — reply to the email thread for that
-              ticket and we&apos;ll pick it right up.
+        <section className={styles.hero}>
+          <div>
+            <h1 className={styles.h1}>{account.name}</h1>
+            <p className={styles.lede}>
+              Where every open ticket stands, updated live from our support team.
             </p>
           </div>
-        )}
-      </header>
 
-      <div className={styles.seclabel}>Open tickets — {open.length}</div>
-      {open.map((t, i) => (
-        <TicketCard key={`open-${i}`} t={t} defaultOpen={t.chip === "waiting_for_you"} />
-      ))}
+          <aside className={styles.summary}>
+            <div className={styles.sumHead}>At a glance</div>
+            <div className={styles.sumStats}>
+              <div className={styles.sumStat}>
+                <span className={styles.sumN}>{open.length}</span>
+                <span className={styles.sumL}>Open {open.length === 1 ? "ticket" : "tickets"}</span>
+              </div>
+              <div className={`${styles.sumStat} ${styles.sumYou}`}>
+                <span className={styles.sumN}>{needsResponse}</span>
+                <span className={styles.sumL}>Needs your reply</span>
+              </div>
+              <div className={styles.sumStat}>
+                <span className={styles.sumN}>{resolved.length}</span>
+                <span className={styles.sumL}>Resolved · last 30 days</span>
+              </div>
+            </div>
+            <div className={styles.sumFoot}>
+              Updated {fmtDate(account.lastUpdatedISO)} · refreshes automatically
+            </div>
+          </aside>
+        </section>
 
-      {resolved.length > 0 && (
-        <details className={styles.resolvedGroup}>
-          <summary className={styles.resolvedSummary}>
-            <span className={styles.chev} aria-hidden>▾</span>
-            Recently resolved
-            <span className={styles.resCount}>{resolved.length} in the last 30 days</span>
-          </summary>
-          {resolved.map((t, i) => (
-            <TicketCard key={`res-${i}`} t={t} defaultOpen={false} resolved />
-          ))}
-        </details>
-      )}
-
-      <footer className={styles.footer}>
-        <b>Questions about a ticket?</b> Reply to the email thread you already have with our
-        support team — every ticket above links back to its original conversation.
-        <br />
-        General support: <b>support@fieldpulse.com</b>
-        <div className={styles.fine}>
-          This page is read-only and updates automatically from FieldPulse&apos;s support system.
+        <div className={styles.sec}>
+          <h2>Open tickets</h2>
+          <span className={styles.secC}>{open.length} active</span>
+          <span className={styles.rule} />
         </div>
-      </footer>
+
+        {open.length === 0 ? (
+          <p className={styles.empty}>No open tickets right now. You are all caught up.</p>
+        ) : (
+          open.map((t, i) => <TicketCard key={`open-${i}`} t={t} />)
+        )}
+
+        {resolved.length > 0 && (
+          <details className={styles.rez}>
+            <summary>
+              <IconChevron />
+              Recently resolved
+              <span className={styles.rcount}>
+                <b>{resolved.length}</b> resolved · last 30 days
+              </span>
+            </summary>
+            {resolved.map((t, i) => (
+              <div className={styles.rzItem} key={`res-${i}`}>
+                <span className={styles.ck} aria-hidden>✓</span>
+                <span className={styles.rzTitle}>{t.subject}</span>
+                <span className={styles.rzDate}>
+                  {t.resolvedDateISO ? `Resolved ${fmtDate(t.resolvedDateISO)}` : "Resolved"}
+                </span>
+              </div>
+            ))}
+          </details>
+        )}
+
+        <footer className={styles.footer}>
+          <b>Need to reply to a ticket?</b> Just reply to the email thread you already have
+          with our support team. Every ticket above links back to that same conversation.
+          General support: <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a>
+          <div className={styles.fine}>
+            This page is read-only and updates automatically from FieldPulse&apos;s support
+            system. The link is private to your account.
+          </div>
+        </footer>
+      </div>
     </main>
   );
 }
 
-function TicketCard({
-  t,
-  defaultOpen,
-  resolved,
-}: {
-  t: Ticket;
-  defaultOpen: boolean;
-  resolved?: boolean;
-}) {
+function TicketCard({ t }: { t: Ticket }) {
+  const attn = t.chip === "waiting_for_you";
+  const status = STATUS[t.chip];
   return (
-    <details className={`${styles.tk} ${t.chip === "waiting_for_you" ? styles.tkAttn : ""}`} open={defaultOpen}>
-      <summary className={styles.tkRow}>
-        <span className={`${styles.chip} ${chipClass(t.chip)}`}>
-          {resolved && t.resolvedDateISO
-            ? `Resolved · ${fmtDate(t.resolvedDateISO)}`
-            : CHIP_LABEL[t.chip]}
+    <article className={`${styles.tk} ${attn ? styles.tkYou : ""}`}>
+      <div className={styles.tkLeft}>
+        <span className={`${styles.chip} ${styles[status.cls]}`}>
+          <status.Icon />
+          {status.label}
         </span>
-        <span className={styles.tkMain}>
-          <span className={styles.tkTitle}>{t.subject}</span>
-          <span className={styles.tkMeta}>Opened {fmtDate(t.openedISO)}</span>
-        </span>
-        <span className={styles.chev} aria-hidden>▾</span>
-      </summary>
-      <div className={styles.tkBody}>
-        <div className={styles.updLabel}>
-          {resolved ? "Resolution" : "Latest update from our team"}
-        </div>
-        <div className={styles.upd}>{t.latestUpdate}</div>
-        <div className={styles.facts}>
-          <div className={styles.fact}>
-            <b>Opened</b>
-            <span>{fmtDate(t.openedISO)}</span>
-          </div>
-          <div className={styles.fact}>
-            <b>Last activity</b>
-            <span>{fmtDate(t.lastActivityISO)}</span>
-          </div>
-          {!resolved && (
-            <div className={styles.fact}>
-              <b>Waiting on</b>
-              <span>{waitingOn(t.chip)}</span>
-            </div>
-          )}
+        <h3 className={styles.subject}>{t.subject}</h3>
+        <div className={styles.meta}>
+          <span>Opened <b>{fmtDate(t.openedISO)}</b></span>
+          <span>Updated <b>{fmtDate(t.lastActivityISO)}</b></span>
         </div>
       </div>
-    </details>
+      <div className={styles.update}>
+        <div className={styles.updLabel}>Latest update</div>
+        <p>{t.latestUpdate}</p>
+      </div>
+    </article>
   );
 }
