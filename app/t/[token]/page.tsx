@@ -130,7 +130,7 @@ export default async function TrackerPage({
               </div>
               <div className={styles.sumStat}>
                 <span className={styles.sumN}>{resolved.length}</span>
-                <span className={styles.sumL}>Resolved · last 30 days</span>
+                <span className={styles.sumL}>Resolved · last 30{" "}days</span>
               </div>
             </div>
             <div className={styles.sumFoot}>
