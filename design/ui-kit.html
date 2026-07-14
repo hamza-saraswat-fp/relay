@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FieldPulse · Relay UI Kit</title>
+<link rel="icon" href="../public/brand/fp_icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#00034d; --cobalt:#253e9a; --sky:#6183d8; --aqua:#6cb4e4; --quartz:#8b8ed6; --fog:#e2e2e2;
+    --success:#1e7a57; --attention:#d98324;
+    --ink:#00034d; --ink-2:#23264f; --ink-3:#4a4d70; --ink-4:#71749a;
+    --line:#e3e5f0; --bg:#f8f9fd; --surface:#fff;
+    --sans:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5}
+  a{color:var(--cobalt)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px 120px}
+
+  /* header */
+  .masthead{background:var(--navy);color:#fff;border-radius:0 0 26px 26px;padding:34px 0 40px;position:relative;overflow:hidden}
+  .masthead .arc{position:absolute;right:-120px;top:-160px;width:520px;height:520px;border-radius:50%;
+    background:radial-gradient(circle at 70% 30%, rgba(108,180,228,.5), rgba(108,180,228,0) 60%);pointer-events:none}
+  .masthead .inner{max-width:1080px;margin:0 auto;padding:0 28px;position:relative}
+  .mh-logo{height:30px;display:block}
+  .mh-title{font-size:38px;font-weight:800;letter-spacing:-.02em;margin:26px 0 6px}
+  .mh-sub{color:#b9c2ef;font-size:15px;max-width:52ch}
+  .mh-meta{margin-top:18px;font-family:var(--mono);font-size:12px;color:var(--aqua);letter-spacing:.04em;text-transform:uppercase}
+
+  .sec{margin-top:64px}
+  .sec-h{display:flex;align-items:baseline;gap:14px;margin:0 0 20px}
+  .sec-h h2{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-4);font-weight:700;margin:0}
+  .sec-h::after{content:"";height:1px;background:var(--line);flex:1;align-self:center}
+
+  /* color */
+  .swatches{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:720px){.swatches{grid-template-columns:1fr 1fr}}
+  .sw{border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface);box-shadow:0 1px 2px rgba(0,3,77,.05)}
+  .sw .chip{height:104px;display:flex;align-items:flex-end;padding:14px}
+  .sw .chip b{color:#fff;font-weight:700;font-size:15px;letter-spacing:.01em}
+  .sw .meta{padding:12px 14px 14px}
+  .sw .meta .hex{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--ink-2)}
+  .sw .meta .use{font-size:12px;color:var(--ink-4);margin-top:3px}
+  .sw .meta .tok{font-family:var(--mono);font-size:11px;color:var(--sky);margin-top:6px}
+
+  /* tints row */
+  .tints{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  @media(max-width:720px){.tints{grid-template-columns:repeat(2,1fr)}}
+  .tint{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+  .tint .bar{height:46px}
+  .tint .lab{font-family:var(--mono);font-size:11px;color:var(--ink-3);padding:8px 10px}
+
+  /* status chips */
+  .chips{display:flex;flex-wrap:wrap;gap:12px}
+  .st{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:7px 14px 7px 12px;border-radius:999px;border:1px solid}
+  .st .dot{width:8px;height:8px;border-radius:50%}
+  .st.you{color:#8a4d09;background:var(--attention-050,#fbf1e3);border-color:#f2d9b4}
+  .st.you .dot{background:var(--attention)}
+  .st.support{color:var(--cobalt);background:#eaeef8;border-color:#ccd4ef}
+  .st.support .dot{background:var(--cobalt)}
+  .st.progress{color:#2f4f96;background:#edf2fc;border-color:#cedcf4}
+  .st.progress .dot{background:var(--sky)}
+  .st.resolved{color:var(--success);background:#e6f2ec;border-color:#c2ded1}
+  .st.resolved .dot{background:var(--success)}
+  .cap{font-size:12.5px;color:var(--ink-4);margin-top:12px}
+
+  /* type scale */
+  .type .row{display:flex;align-items:baseline;gap:20px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .type .row .k{font-family:var(--mono);font-size:11px;color:var(--ink-4);width:130px;flex:none}
+  .d1{font-size:44px;font-weight:800;letter-spacing:-.025em;line-height:1}
+  .d2{font-size:30px;font-weight:700;letter-spacing:-.02em}
+  .d3{font-size:20px;font-weight:700}
+  .body{font-size:15px;color:var(--ink-2)}
+  .mono{font-family:var(--mono);font-size:14px;letter-spacing:.02em}
+
+  /* buttons */
+  .btns{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{font-family:var(--sans);font-weight:700;font-size:14px;border-radius:10px;padding:11px 18px;border:1px solid transparent;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+  .btn.primary{background:var(--cobalt);color:#fff}
+  .btn.navy{background:var(--navy);color:#fff}
+  .btn.ghost{background:#fff;color:var(--cobalt);border-color:#ccd4ef}
+  .btn.link{background:transparent;color:var(--cobalt);padding-left:2px;padding-right:2px}
+
+  /* sample card */
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 22px;box-shadow:0 1px 2px rgba(0,3,77,.05);max-width:560px;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--attention)}
+  .card .top{display:flex;align-items:center;gap:12px}
+  .card h3{margin:14px 0 4px;font-size:17px;font-weight:700}
+  .card .meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-4)}
+  .card .upd{margin-top:14px;background:var(--bg);border-radius:10px;padding:13px 15px;font-size:14px;color:var(--ink-2);border-left:3px solid var(--sky)}
+
+  .lockups{display:flex;gap:18px;flex-wrap:wrap}
+  .lock{border:1px solid var(--line);border-radius:16px;padding:26px;display:grid;place-items:center;min-height:120px;background:#fff}
+  .lock.dark{background:var(--navy);border-color:var(--navy)}
+  .lock img{height:34px}
+  .lock.icon img{height:56px}
+  .foot{margin-top:70px;padding-top:22px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-4);font-family:var(--mono)}
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <div class="arc"></div>
+    <div class="inner">
+      <img class="mh-logo" src="../public/brand/white_logo.svg" alt="FieldPulse" />
+      <div class="mh-title">Relay UI Kit</div>
+      <div class="mh-sub">The FieldPulse design system for customer-facing support status. Tokens in <code style="font-family:var(--mono);color:#cfe6f7">app/brand.css</code>, rules in <code style="font-family:var(--mono);color:#cfe6f7">docs/brand-guidelines.md</code>.</div>
+      <div class="mh-meta">Signal · Live · Trackable</div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- LOGO -->
+    <section class="sec">
+      <div class="sec-h"><h2>Logo</h2></div>
+      <div class="lockups">
+        <div class="lock"><img src="../public/brand/navy_logo.svg" alt="Navy wordmark" /></div>
+        <div class="lock dark"><img src="../public/brand/white_logo.svg" alt="White wordmark" /></div>
+        <div class="lock icon"><img src="../public/brand/fp_icon.svg" alt="Signal mark" /></div>
+      </div>
+      <p class="cap">Navy wordmark on light, white wordmark on dark, signal mark for compact and favicon use. The mark is the browser-tab icon.</p>
+    </section>
+
+    <!-- COLOR -->
+    <section class="sec">
+      <div class="sec-h"><h2>Core palette</h2></div>
+      <div class="swatches">
+        <div class="sw"><div class="chip" style="background:#00034d"><b>Navy</b></div><div class="meta"><div class="hex">#00034D</div><div class="use">Anchor. Backgrounds, headlines, all ink.</div><div class="tok">--fp-navy</div></div></div>
+        <div class="sw"><div class="chip" style="background:#253e9a"><b>Cobalt</b></div><div class="meta"><div class="hex">#253E9A</div><div class="use">Primary action, links, "with support".</div><div class="tok">--fp-cobalt</div></div></div>
+        <div class="sw"><div class="chip" style="background:#6183d8"><b>Sky</b></div><div class="meta"><div class="hex">#6183D8</div><div class="use">In progress, charts, hovers.</div><div class="tok">--fp-sky</div></div></div>
+        <div class="sw"><div class="chip" style="background:#6cb4e4"><b style="color:#00034d">Aqua</b></div><div class="meta"><div class="hex">#6CB4E4</div><div class="use">The live/pulse spark. Use sparingly.</div><div class="tok">--fp-aqua</div></div></div>
+        <div class="sw"><div class="chip" style="background:#8b8ed6"><b>Quartz</b></div><div class="meta"><div class="hex">#8B8ED6</div><div class="use">Soft tertiary, decorative, muted labels.</div><div class="tok">--fp-quartz</div></div></div>
+        <div class="sw"><div class="chip" style="background:#e2e2e2"><b style="color:#00034d">Fog</b></div><div class="meta"><div class="hex">#E2E2E2</div><div class="use">Neutral gray. Borders, disabled, quiet.</div><div class="tok">--fp-fog</div></div></div>
+      </div>
+    </section>
+
+    <!-- TINTS -->
+    <section class="sec">
+      <div class="sec-h"><h2>Tints &amp; ink scale</h2></div>
+      <div class="tints" style="margin-bottom:14px">
+        <div class="tint"><div class="bar" style="background:#eaebf4"></div><div class="lab">navy-050</div></div>
+        <div class="tint"><div class="bar" style="background:#eaeef8"></div><div class="lab">cobalt-050</div></div>
+        <div class="tint"><div class="bar" style="background:#edf2fc"></div><div class="lab">sky-050</div></div>
+        <div class="tint"><div class="bar" style="background:#e8f3fb"></div><div class="lab">aqua-050</div></div>
+        <div class="tint"><div class="bar" style="background:#efeffb"></div><div class="lab">quartz-050</div></div>
+      </div>
+      <div class="tints">
+        <div class="tint"><div class="bar" style="background:#00034d"></div><div class="lab">ink</div></div>
+        <div class="tint"><div class="bar" style="background:#23264f"></div><div class="lab">ink-2</div></div>
+        <div class="tint"><div class="bar" style="background:#4a4d70"></div><div class="lab">ink-3</div></div>
+        <div class="tint"><div class="bar" style="background:#71749a"></div><div class="lab">ink-4</div></div>
+        <div class="tint"><div class="bar" style="background:#e3e5f0"></div><div class="lab">line</div></div>
+      </div>
+    </section>
+
+    <!-- STATUS -->
+    <section class="sec">
+      <div class="sec-h"><h2>Status chips</h2></div>
+      <div class="chips">
+        <span class="st you"><span class="dot"></span>Waiting for You</span>
+        <span class="st support"><span class="dot"></span>Waiting for Support</span>
+        <span class="st progress"><span class="dot"></span>In Progress</span>
+        <span class="st resolved"><span class="dot"></span>Resolved</span>
+      </div>
+      <p class="cap">Four fixed states. "Waiting for You" is the only warm one so it always wins the eye. Reinforced by fill + dot + label, never hue alone.</p>
+    </section>
+
+    <!-- TYPE -->
+    <section class="sec">
+      <div class="sec-h"><h2>Typography</h2></div>
+      <div class="type">
+        <div class="row"><div class="k">Display / 44</div><div class="d1">Where is my ticket?</div></div>
+        <div class="row"><div class="k">Heading / 30</div><div class="d2">Bluebird Plumbing &amp; Air</div></div>
+        <div class="row"><div class="k">Subhead / 20</div><div class="d3">Invoice not syncing to QuickBooks</div></div>
+        <div class="row"><div class="k">Body / 15</div><div class="body">We traced the sync failure to a mismatched tax mapping. Once we hear back, the fix is ready to apply on our side.</div></div>
+        <div class="row"><div class="k">Mono / 14</div><div class="mono">FP-70593 · OPENED JAN 15 · LAST PING JUN 10</div></div>
+      </div>
+      <p class="cap">Hanken Grotesk for text, IBM Plex Mono for tabular data (times, ticket ids, the board). Display faces vary by direction.</p>
+    </section>
+
+    <!-- BUTTONS -->
+    <section class="sec">
+      <div class="sec-h"><h2>Buttons</h2></div>
+      <div class="btns">
+        <button class="btn primary">Reply to your thread</button>
+        <button class="btn navy">Open ticket</button>
+        <button class="btn ghost">View all activity</button>
+        <button class="btn link">support@fieldpulse.com &rsaquo;</button>
+      </div>
+    </section>
+
+    <!-- SAMPLE CARD -->
+    <section class="sec">
+      <div class="sec-h"><h2>Ticket card</h2></div>
+      <div class="card">
+        <div class="top">
+          <span class="st you"><span class="dot"></span>Waiting for You</span>
+          <span class="meta">FP-70593</span>
+        </div>
+        <h3>Invoice #70593 not syncing to QuickBooks</h3>
+        <div class="meta">OPENED JAN 15, 2026 · LAST ACTIVITY JUN 10, 2026 · WAITING ON YOU</div>
+        <div class="upd">We traced the sync failure to a mismatched tax mapping on this invoice. We have sent two questions about your QuickBooks tax codes. Once we hear back, the fix is ready to apply on our side.</div>
+      </div>
+    </section>
+
+    <div class="foot">FieldPulse · Relay design system · v1</div>
+  </div>
+</body>
+</html>

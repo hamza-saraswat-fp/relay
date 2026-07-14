@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Relay · Redesign Options</title>
+<link rel="icon" href="../public/brand/fp_icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+  :root{--navy:#00034d;--cobalt:#253e9a;--sky:#6183d8;--aqua:#6cb4e4;--quartz:#8b8ed6;
+    --ink:#00034d;--ink-3:#5c5f83;--ink-4:#8589ab;--line:#e3e5f0;--bg:#f6f8fd;
+    --sans:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .mast{background:var(--navy);color:#fff;padding:34px 0 40px;position:relative;overflow:hidden;border-radius:0 0 26px 26px}
+  .mast .arc{position:absolute;right:-120px;top:-160px;width:520px;height:520px;border-radius:50%;
+    background:radial-gradient(circle at 70% 30%,rgba(108,180,228,.5),transparent 60%)}
+  .in{max-width:1120px;margin:0 auto;padding:0 28px;position:relative}
+  .mast img{height:28px}
+  .mast h1{font-size:34px;font-weight:800;letter-spacing:-.02em;margin:22px 0 6px}
+  .mast p{color:#b9c2ef;font-size:15px;max-width:60ch;margin:0}
+  .mast .tag{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--aqua);letter-spacing:.06em}
+
+  .grid{max-width:1120px;margin:36px auto 0;padding:0 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;text-decoration:none;color:inherit;
+    box-shadow:0 1px 2px rgba(0,3,77,.05);transition:transform .18s,box-shadow .18s;display:flex;flex-direction:column}
+  .card:hover{transform:translateY(-3px);box-shadow:0 22px 50px -24px rgba(0,3,77,.4)}
+  .thumb{height:230px;overflow:hidden;position:relative;border-bottom:1px solid var(--line);background:#0a0f57}
+  .thumb iframe{width:1280px;height:1640px;border:0;transform:scale(.312);transform-origin:top left;pointer-events:none}
+  .body{padding:18px 20px 20px}
+  .k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--sky)}
+  .card h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:8px 0 6px}
+  .card p{font-size:13.5px;color:var(--ink-3);line-height:1.55;margin:0 0 14px}
+  .go{font-size:13px;font-weight:700;color:var(--cobalt)}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+  .t{font-size:11px;color:var(--ink-4);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+
+  .row2{max-width:1120px;margin:22px auto 80px;padding:0 28px;display:flex;gap:14px;flex-wrap:wrap}
+  .mini{flex:1;min-width:220px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;text-decoration:none;color:inherit;
+    display:flex;align-items:center;gap:12px;transition:border-color .18s}
+  .mini:hover{border-color:var(--sky)}
+  .mini .ico{width:36px;height:36px;border-radius:10px;background:var(--bg);display:grid;place-items:center;flex:none}
+  .mini b{font-size:14px}.mini span{display:block;font-size:12px;color:var(--ink-4)}
+</style>
+</head>
+<body>
+  <div class="mast">
+    <div class="arc"></div>
+    <div class="in">
+      <img src="../public/brand/white_logo.svg" alt="FieldPulse" />
+      <h1>Relay · Redesign options</h1>
+      <p>Three distinct customer-facing directions for the support status page, all built on the FieldPulse palette and the live-signal idea. Click any option to open the full, interactive page.</p>
+      <div class="tag">Same data · same brand · three personalities</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="option-a-board.html">
+      <div class="thumb"><iframe src="option-a-board.html" scrolling="no" tabindex="-1" title="Option A"></iframe></div>
+      <div class="body">
+        <div class="k">Option A</div>
+        <h2>The Board</h2>
+        <p>A live departures / mission-control board. Dark navy, monospace data, a pulsing signal. Leans all the way into the flight-tracker idea.</p>
+        <div class="tags"><span class="t">Bold</span><span class="t">Dark</span><span class="t">Technical</span></div>
+        <div class="go" style="margin-top:12px">Open full page &rsaquo;</div>
+      </div>
+    </a>
+
+    <a class="card" href="option-b-signal.html">
+      <div class="thumb"><iframe src="option-b-signal.html" scrolling="no" tabindex="-1" title="Option B"></iframe></div>
+      <div class="body">
+        <div class="k">Option B</div>
+        <h2>Signal</h2>
+        <p>A premium, modern live-status page. Light and airy with a pulse-line hero and a per-ticket status meter. The safe, productionable pick.</p>
+        <div class="tags"><span class="t">Modern</span><span class="t">Light</span><span class="t">SaaS</span></div>
+        <div class="go" style="margin-top:12px">Open full page &rsaquo;</div>
+      </div>
+    </a>
+
+    <a class="card" href="option-c-journey.html">
+      <div class="thumb"><iframe src="option-c-journey.html" scrolling="no" tabindex="-1" title="Option C"></iframe></div>
+      <div class="body">
+        <div class="k">Option C</div>
+        <h2>The Journey</h2>
+        <p>A warm package-tracker for support. Serif headline, transit tracks, and message bubbles. The most human, easiest for non-technical owners.</p>
+        <div class="tags"><span class="t">Warm</span><span class="t">Human</span><span class="t">Editorial</span></div>
+        <div class="go" style="margin-top:12px">Open full page &rsaquo;</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="row2">
+    <a class="mini" href="ui-kit.html">
+      <span class="ico"><img src="../public/brand/fp_icon.svg" alt="" style="width:22px"/></span>
+      <span><b>UI Kit</b><span>Palette, type, status chips, components</span></span>
+    </a>
+    <a class="mini" href="../docs/brand-guidelines.md">
+      <span class="ico">&#9635;</span>
+      <span><b>Brand guidelines</b><span>docs/brand-guidelines.md</span></span>
+    </a>
+    <a class="mini" href="../app/brand.css">
+      <span class="ico" style="font-family:var(--mono);font-size:12px">{ }</span>
+      <span><b>Design tokens</b><span>app/brand.css</span></span>
+    </a>
+  </div>
+</body>
+</html>

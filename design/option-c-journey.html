@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bluebird Plumbing &amp; Air · FieldPulse Support Status</title>
+<link rel="icon" href="../public/brand/fp_icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#00034d; --cobalt:#253e9a; --sky:#6183d8; --aqua:#6cb4e4; --quartz:#8b8ed6;
+    --amber:#d98324; --amber-bg:#fbf1e3; --green:#1e7a57; --green-bg:#e7f2ec;
+    --ink:#00034d; --ink-2:#3c3f5e; --ink-3:#6a6a80; --ink-4:#9a958f;
+    --line:#ebe5da; --line-2:#f2ede4; --paper:#fffdfa;
+    --disp:"Fraunces",Georgia,"Times New Roman",serif;
+    --sans:"Figtree",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(1000px 560px at 92% -6%, #eef1fb, transparent 55%), linear-gradient(180deg,#faf7f1,#f5f0e8);
+    min-height:100vh}
+  .wrap{max-width:800px;margin:0 auto;padding:0 24px 110px}
+
+  /* header */
+  header.bar{display:flex;align-items:center;justify-content:space-between;padding:24px 0 6px}
+  header.bar img{height:22px;display:block}
+  .live{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--ink-3)}
+  .live i{width:8px;height:8px;border-radius:50%;background:var(--aqua);box-shadow:0 0 0 0 rgba(108,180,228,.6);animation:beat 2.2s infinite}
+  @keyframes beat{0%{box-shadow:0 0 0 0 rgba(108,180,228,.5)}70%{box-shadow:0 0 0 9px rgba(108,180,228,0)}100%{box-shadow:0 0 0 0 rgba(108,180,228,0)}}
+
+  /* hero */
+  .hero{padding:40px 0 8px}
+  .kicker{font-size:13px;font-weight:600;color:var(--sky);letter-spacing:.02em}
+  h1{font-family:var(--disp);font-weight:600;font-size:clamp(34px,6vw,54px);line-height:1.05;letter-spacing:-.01em;margin:12px 0 0}
+  h1 em{font-style:italic;color:var(--cobalt)}
+  .intro{font-size:17px;color:var(--ink-3);margin:18px 0 0;max-width:52ch;line-height:1.6}
+  .sums{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+  .sum{display:inline-flex;align-items:baseline;gap:8px;background:var(--paper);border:1px solid var(--line);
+    border-radius:999px;padding:9px 16px;box-shadow:0 1px 2px rgba(74,60,20,.04)}
+  .sum b{font-family:var(--disp);font-size:20px;font-weight:600}
+  .sum span{font-size:13px;color:var(--ink-3)}
+  .sum.you b{color:var(--amber)} .sum.res b{color:var(--green)}
+
+  /* attention */
+  .attn{margin-top:22px;display:flex;gap:14px;align-items:center;background:linear-gradient(100deg,var(--amber-bg),var(--paper));
+    border:1px solid #eed6b2;border-radius:18px;padding:16px 18px}
+  .attn .av{width:40px;height:40px;border-radius:12px;background:var(--amber);color:#fff;display:grid;place-items:center;flex:none}
+  .attn p{margin:0;font-size:14.5px;color:#7a5320;line-height:1.5}
+  .attn b{color:#6b3d0c}
+
+  /* section */
+  .sec{font-family:var(--disp);font-size:15px;font-weight:600;color:var(--ink-2);margin:46px 0 16px;display:flex;align-items:center;gap:12px}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* journey card */
+  .jc{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:22px 24px 20px;margin-bottom:16px;
+    box-shadow:0 2px 4px rgba(74,60,20,.04);position:relative;transition:box-shadow .2s,transform .2s}
+  .jc:hover{box-shadow:0 16px 36px -20px rgba(0,3,77,.26);transform:translateY(-1px)}
+  .jc.attnc{border-color:#eed6b2;box-shadow:0 14px 34px -22px rgba(217,131,36,.5)}
+  .jc .top{display:flex;align-items:flex-start;gap:12px}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid;white-space:nowrap}
+  .pill .d{width:7px;height:7px;border-radius:50%}
+  .pill.you{color:#8a4d09;background:var(--amber-bg);border-color:#eed6b2}.pill.you .d{background:var(--amber)}
+  .pill.support{color:var(--cobalt);background:#eaeef8;border-color:#ccd4ef}.pill.support .d{background:var(--cobalt)}
+  .pill.progress{color:#2f4f96;background:#eef2fc;border-color:#cedcf4}.pill.progress .d{background:var(--sky)}
+  .pill.resolved{color:var(--green);background:var(--green-bg);border-color:#c2ded1}.pill.resolved .d{background:var(--green)}
+  .waiton{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--ink-4);white-space:nowrap;padding-top:5px}
+  .waiton b{color:var(--amber)}
+  .jc h3{font-family:var(--disp);font-size:21px;font-weight:600;line-height:1.25;margin:14px 0 0;letter-spacing:-.01em}
+
+  /* track */
+  .track{position:relative;display:grid;grid-template-columns:repeat(4,1fr);margin:26px 4px 6px}
+  .track .base{position:absolute;left:12.5%;right:12.5%;top:19px;height:3px;background:var(--line);border-radius:3px}
+  .track .prog{position:absolute;left:12.5%;top:19px;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--navy),var(--sky))}
+  .stg{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+  .stg .ic{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;background:var(--paper);border:2px solid var(--line);color:var(--ink-4)}
+  .stg .ic svg{width:18px;height:18px}
+  .stg.done .ic{background:var(--navy);border-color:var(--navy);color:#fff}
+  .stg .lab{font-size:11.5px;font-weight:600;color:var(--ink-4)}
+  .stg.done .lab{color:var(--ink-2)}
+  .stg.cur .lab{font-weight:700}
+  .stg .since{font-size:10.5px;color:var(--ink-4);margin-top:-4px}
+  .stg.cur.you .ic{background:var(--amber);border-color:var(--amber);color:#fff;box-shadow:0 0 0 5px var(--amber-bg)}
+  .stg.cur.you .lab{color:#8a4d09}
+  .stg.cur.progress .ic{background:var(--sky);border-color:var(--sky);color:#fff;box-shadow:0 0 0 5px #eef2fc}
+  .stg.cur.progress .lab{color:#2f4f96}
+  .stg.cur.support .ic{background:var(--cobalt);border-color:var(--cobalt);color:#fff;box-shadow:0 0 0 5px #eaeef8}
+  .stg.cur.support .lab{color:var(--cobalt)}
+  .stg.cur.resolved .ic{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 0 0 5px var(--green-bg)}
+  .stg.cur.resolved .lab{color:var(--green)}
+  .stg.cur .ic{animation:pop 2.4s ease-in-out infinite}
+  @keyframes pop{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+
+  /* message */
+  .msg{display:flex;gap:12px;margin-top:20px}
+  .msg .who{flex:none;width:34px;height:34px;border-radius:50%;background:var(--navy);display:grid;place-items:center}
+  .msg .who svg{width:19px;height:19px}
+  .bubble{background:var(--line-2);border-radius:4px 16px 16px 16px;padding:14px 16px;position:relative}
+  .bubble .nm{font-size:11.5px;font-weight:700;color:var(--cobalt);margin-bottom:4px}
+  .bubble p{margin:0;font-size:14.5px;color:var(--ink-2);line-height:1.65}
+  .jmeta{display:flex;gap:20px;margin-top:16px;padding-left:46px;font-size:12px;color:var(--ink-4)}
+  .jmeta b{color:var(--ink-2);font-weight:600}
+
+  /* resolved */
+  details.rez{margin-top:14px}
+  details.rez>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:11px;padding:14px 2px;
+    font-family:var(--disp);font-size:15px;font-weight:600;color:var(--ink-2)}
+  details.rez>summary::-webkit-details-marker{display:none}
+  .rchev{font-family:var(--sans);transition:transform .25s}
+  details.rez[open] .rchev{transform:rotate(180deg)}
+  .rcount{font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--green);background:var(--green-bg);border:1px solid #c2ded1;border-radius:999px;padding:2px 10px}
+  .rzi{display:flex;align-items:center;gap:13px;background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:14px 16px;margin-bottom:9px}
+  .rzi .ck{width:30px;height:30px;border-radius:50%;background:var(--green-bg);color:var(--green);display:grid;place-items:center;flex:none}
+  .rzi .t{font-size:14.5px;font-weight:600}
+  .rzi .dt{margin-left:auto;font-size:12px;color:var(--ink-4);white-space:nowrap}
+
+  footer{margin-top:52px;padding:24px 26px;background:var(--navy);border-radius:22px;color:#c9d0f2;position:relative;overflow:hidden}
+  footer .g{position:absolute;right:-60px;bottom:-100px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(108,180,228,.24),transparent 62%)}
+  footer h4{font-family:var(--disp);font-weight:600;color:#fff;margin:0 0 8px;font-size:18px}
+  footer p{margin:0;font-size:13.5px;line-height:1.7;max-width:58ch}
+  footer a{color:var(--aqua);font-weight:600;text-decoration:none}
+  footer .fine{margin-top:14px;font-size:11px;color:#8189c9}
+
+  @media(max-width:560px){
+    .track .lab{font-size:10px}
+    .jmeta{padding-left:0}
+  }
+  @media (prefers-reduced-motion:reduce){.live i,.stg.cur .ic{animation:none}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="bar">
+      <img src="../public/brand/navy_logo.svg" alt="FieldPulse" />
+      <span class="live"><i></i>Tracking live</span>
+    </header>
+
+    <section class="hero">
+      <div class="kicker">Your FieldPulse support tracker</div>
+      <h1>Here is where things stand, <em>Bluebird Plumbing &amp; Air</em>.</h1>
+      <p class="intro">Every open ticket with our support team, tracked from opened to resolved, so you always know exactly where it is and who has the ball.</p>
+      <div class="sums">
+        <span class="sum"><b>4</b><span>open tickets</span></span>
+        <span class="sum you"><b>1</b><span>needs you</span></span>
+        <span class="sum res"><b>3</b><span>resolved this month</span></span>
+      </div>
+      <div class="attn">
+        <div class="av">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <p><b>One ticket is waiting on you.</b> We are paused until we hear back. Reply to that ticket's email thread and we pick it right back up.</p>
+      </div>
+    </section>
+
+    <div class="sec">On the way</div>
+
+    <!-- waiting_for_you -->
+    <article class="jc attnc">
+      <div class="top">
+        <span class="pill you"><span class="d"></span>Waiting for You</span>
+        <span class="waiton">Ball is with <b>you</b></span>
+      </div>
+      <h3>Invoice #70593 not syncing to QuickBooks</h3>
+      <div class="track">
+        <div class="base"></div><div class="prog" style="width:50%"></div>
+        <div class="stg done"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><span class="lab">Opened</span></div>
+        <div class="stg done"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="lab">Investigating</span></div>
+        <div class="stg cur you"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="lab">Waiting on you</span><span class="since">since Jun 10</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="lab">Resolved</span></div>
+      </div>
+      <div class="msg">
+        <span class="who"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="1.5" fill="#fff" stroke="none"/><path d="M6.5 11.4a5.2 5.2 0 0 1 5.1 5.1"/><path d="M6.5 7.2a9.4 9.4 0 0 1 9.3 9.3"/></svg></span>
+        <div class="bubble">
+          <div class="nm">FieldPulse Support</div>
+          <p>We traced the sync failure to a mismatched tax mapping on this invoice. We have sent over two questions about how your QuickBooks tax codes are set up. Once we hear back, the fix is ready to apply on our side.</p>
+        </div>
+      </div>
+      <div class="jmeta"><span>Opened <b>Jan 15, 2026</b></span><span>Last activity <b>Jun 10, 2026</b></span></div>
+    </article>
+
+    <!-- in_progress -->
+    <article class="jc">
+      <div class="top">
+        <span class="pill progress"><span class="d"></span>In Progress</span>
+        <span class="waiton">Ball is with FieldPulse</span>
+      </div>
+      <h3>Arrival window time changes after saving a job</h3>
+      <div class="track">
+        <div class="base"></div><div class="prog" style="width:25%"></div>
+        <div class="stg done"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><span class="lab">Opened</span></div>
+        <div class="stg cur progress"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="lab">Investigating</span><span class="since">since Jun 9</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="lab">Waiting on you</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="lab">Resolved</span></div>
+      </div>
+      <div class="msg">
+        <span class="who"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="1.5" fill="#fff" stroke="none"/><path d="M6.5 11.4a5.2 5.2 0 0 1 5.1 5.1"/><path d="M6.5 7.2a9.4 9.4 0 0 1 9.3 9.3"/></svg></span>
+        <div class="bubble">
+          <div class="nm">FieldPulse Support</div>
+          <p>We reproduced this with your timezone settings and confirmed it is a defect, not a configuration issue. A fix is being tested now, and we expect an update for you within the week.</p>
+        </div>
+      </div>
+      <div class="jmeta"><span>Opened <b>Apr 28, 2026</b></span><span>Last activity <b>Jun 9, 2026</b></span></div>
+    </article>
+
+    <!-- in_progress -->
+    <article class="jc">
+      <div class="top">
+        <span class="pill progress"><span class="d"></span>In Progress</span>
+        <span class="waiton">Ball is with FieldPulse</span>
+      </div>
+      <h3>Purchase orders not syncing for inventory-tracked items</h3>
+      <div class="track">
+        <div class="base"></div><div class="prog" style="width:25%"></div>
+        <div class="stg done"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><span class="lab">Opened</span></div>
+        <div class="stg cur progress"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><span class="lab">Investigating</span><span class="since">since Jun 6</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="lab">Waiting on you</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="lab">Resolved</span></div>
+      </div>
+      <div class="msg">
+        <span class="who"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="1.5" fill="#fff" stroke="none"/><path d="M6.5 11.4a5.2 5.2 0 0 1 5.1 5.1"/><path d="M6.5 7.2a9.4 9.4 0 0 1 9.3 9.3"/></svg></span>
+        <div class="bubble">
+          <div class="nm">FieldPulse Support</div>
+          <p>This is with our engineering team. The root cause is on the integration side, so the fix requires a code change rather than a settings adjustment. It is scheduled into the current engineering cycle.</p>
+        </div>
+      </div>
+      <div class="jmeta"><span>Opened <b>May 5, 2026</b></span><span>Last activity <b>Jun 6, 2026</b></span></div>
+    </article>
+
+    <!-- waiting_for_support -->
+    <article class="jc">
+      <div class="top">
+        <span class="pill support"><span class="d"></span>Waiting for Support</span>
+        <span class="waiton">Ball is with FieldPulse</span>
+      </div>
+      <h3>Commission report excluding invoices in "sent" status</h3>
+      <div class="track">
+        <div class="base"></div><div class="prog" style="width:25%"></div>
+        <div class="stg done"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><span class="lab">Opened</span></div>
+        <div class="stg cur support"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="lab">In queue</span><span class="since">since Jun 11</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><span class="lab">Waiting on you</span></div>
+        <div class="stg"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="lab">Resolved</span></div>
+      </div>
+      <div class="msg">
+        <span class="who"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="16.5" r="1.5" fill="#fff" stroke="none"/><path d="M6.5 11.4a5.2 5.2 0 0 1 5.1 5.1"/><path d="M6.5 7.2a9.4 9.4 0 0 1 9.3 9.3"/></svg></span>
+        <div class="bubble">
+          <div class="nm">FieldPulse Support</div>
+          <p>Your ticket is in our specialist queue. A reviewer is confirming whether this is expected report behavior or a defect, and you will see the first determination here.</p>
+        </div>
+      </div>
+      <div class="jmeta"><span>Opened <b>Jun 11, 2026</b></span><span>Last activity <b>Jun 11, 2026</b></span></div>
+    </article>
+
+    <details class="rez">
+      <summary><span class="rchev">&#9662;</span> Safely delivered <span class="rcount">3 resolved this month</span></summary>
+      <div class="rzi"><span class="ck"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t">Duplicate charge appearing on customer payment</span><span class="dt">Resolved May 28</span></div>
+      <div class="rzi"><span class="ck"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t">Technicians unable to add materials from mobile app</span><span class="dt">Resolved May 19</span></div>
+      <div class="rzi"><span class="ck"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t">Recurring invoice not sending for maintenance agreement</span><span class="dt">Resolved May 15</span></div>
+    </details>
+
+    <footer>
+      <div class="g"></div>
+      <h4>Questions about a ticket?</h4>
+      <p>Reply to the email thread you already have with our support team. Every ticket here links back to its original conversation, so nothing gets lost. General support: <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a></p>
+      <div class="fine">This page is read-only and updates automatically from FieldPulse's support system. The link is private to your account.</div>
+    </footer>
+  </div>
+</body>
+</html>
