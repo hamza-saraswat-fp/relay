@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 26px 0 4px;
+  padding: 20px 0 4px;
 }
 /* baseline (not center): an <img>'s CSS baseline is its bottom edge, so this
    pins the logo's bottom to the label text's baseline precisely. */
@@ -91,71 +91,73 @@
 /* hero */
 .hero {
   display: grid;
-  grid-template-columns: 1.45fr 0.9fr;
-  gap: 34px;
-  align-items: center;
-  margin-top: 30px;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  align-items: start;
+  margin-top: 22px;
 }
 .h1 {
   font-family: var(--disp);
   font-weight: 800;
-  font-size: clamp(36px, 5vw, 56px);
+  font-size: clamp(26px, 3vw, 36px);
   letter-spacing: -0.02em;
-  line-height: 1.02;
+  line-height: 1.05;
   margin: 0;
 }
 .lede {
-  font-size: 16.5px;
+  font-size: 15.5px;
   color: var(--ink-3);
-  margin: 16px 0 0;
+  margin: 10px 0 0;
   max-width: 42ch;
 }
 
-/* summary card (numbers only) */
+/* summary card: a compact horizontal stat strip rather than stacked rows */
 .summary {
   background: linear-gradient(165deg, #0a0f57, #00042f);
-  border-radius: 20px;
-  padding: 24px 28px;
+  border-radius: 16px;
+  padding: 20px 24px;
   color: #eaf0ff;
   box-shadow: 0 20px 44px -22px rgba(0, 3, 77, 0.5);
-  display: flex;
-  flex-direction: column;
 }
 .sumHead {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--aqua);
+  margin-bottom: 14px;
 }
 .sumStats {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  margin: 6px 0;
 }
 .sumStat {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 15px 0;
-  border-top: 1px solid rgba(139, 142, 214, 0.2);
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 14px;
+  border-left: 1px solid rgba(139, 142, 214, 0.2);
 }
-.sumStat:first-child { border-top: 0; }
+.sumStat:first-child { padding-left: 0; border-left: 0; }
 .sumN {
   font-family: var(--disp);
   font-weight: 800;
-  font-size: 44px;
+  font-size: 28px;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-  min-width: 54px;
   color: #fff;
 }
-.sumL { font-size: 14.5px; color: #aeb6ee; font-weight: 500; }
+.sumL { font-size: 12px; line-height: 1.3; color: #aeb6ee; font-weight: 500; }
 .sumYou .sumN { color: var(--aqua); }
-.sumFoot { font-size: 11.5px; color: #7b83c8; margin-top: 6px; }
+.sumFoot {
+  font-size: 11px;
+  color: #7b83c8;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(139, 142, 214, 0.15);
+}
 
 /* section head */
 .sec {
@@ -349,17 +351,20 @@
 /* phone */
 @media (max-width: 560px) {
   .wrap { padding: 0 16px 84px; }
-  .bar { padding: 18px 0 2px; }
+  .bar { padding: 16px 0 2px; }
   .logo { height: 20px; }
   .barDivider { height: 15px; }
   .barLabel { font-size: 16px; }
   .synced { padding: 6px 12px; font-size: 12px; }
-  .hero { margin-top: 16px; }
-  .h1 { font-size: clamp(30px, 8.5vw, 42px); }
-  .lede { font-size: 15.5px; }
-  .summary { padding: 22px; }
-  .sumN { font-size: 40px; min-width: 48px; }
-  .sumL { font-size: 14px; }
+  .hero { margin-top: 14px; }
+  .h1 { font-size: clamp(22px, 7vw, 28px); }
+  .lede { font-size: 14.5px; margin-top: 8px; }
+  .summary { padding: 16px 18px; border-radius: 14px; }
+  .sumHead { margin-bottom: 10px; }
+  .sumStat { padding: 0 8px; gap: 2px; }
+  .sumN { font-size: 21px; }
+  .sumL { font-size: 10.5px; }
+  .sumFoot { margin-top: 10px; padding-top: 10px; }
   .sec { margin: 40px 0 14px; }
   .sec h2 { font-size: 20px; }
   .tk { padding: 18px; }
