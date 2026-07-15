@@ -36,7 +36,7 @@ function isSalesforceId(id: string): boolean {
 function caseSoql(accountIds: string[]): string {
   const ids = accountIds.map((id) => `'${id}'`).join(",");
   return (
-    `SELECT Id, CaseNumber, Subject, Status, CreatedDate, ClosedDate, LastModifiedDate, ` +
+    `SELECT Id, CaseNumber, Subject, Status, Type, CreatedDate, ClosedDate, LastModifiedDate, ` +
     `IsClosed, Resolution__c, AccountId, Account.Name, Account.ParentId ` +
     `FROM Case WHERE Type IN ${CASE_TYPES} AND AccountId IN (${ids}) ` +
     `AND (IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`
@@ -170,7 +170,12 @@ export async function runSync(): Promise<SyncResult> {
             ? stripHtml(email.TextBody || email.HtmlBody || "")
             : "";
       try {
-        const cleaned = await cleanUpdate(source);
+        const cleaned = await cleanUpdate(source, {
+          statusChip: statusToChip(c.Status),
+          subject: c.Subject,
+          caseType: c.Type,
+          emailDate: email?.MessageDate,
+        });
         await supabase.from("case_updates").upsert(
           {
             case_id: caseId,
