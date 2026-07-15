@@ -109,7 +109,7 @@ Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Verce
 | `RELAY_SYNC_KEY` | Auth for the manual sync POST |
 | `CRON_SECRET` | Vercel Cron sends `Authorization: Bearer $CRON_SECRET` on the GET — without it the scheduled sync 401s |
 | `NEXT_PUBLIC_APP_URL` | Origin used to build tracker URLs (set to the real domain in prod) |
-| `SLACK_ALERT_WEBHOOK_URL` | Reserved for sync-failure alerts (IAI-239, not wired yet) |
+| `SLACK_ALERT_WEBHOOK_URL` | Slack incoming webhook — sync failures POST here (IAI-239). Unset = alerting no-ops |
 
 ## API
 
@@ -118,6 +118,7 @@ Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Verce
 | `/api/sync` | GET | `Authorization: Bearer $CRON_SECRET` | Cron-triggered sync |
 | `/api/sync` | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` | Manual refresh; 429 if any run started < 10 min ago |
 | `/api/salesforce/case-created` | POST | `Authorization: Bearer $SALESFORCE_INTEGRATION_KEY` | Body `{ "accountId": "001…", "accountName": "…" }` → `{ "trackerUrl": "https://…/t/<token>" }`. Idempotent per account. |
+| `/api/health` | GET | `x-relay-sync-key: $RELAY_SYNC_KEY` | Sync health over `sync_runs` → `{ state, healthy, ageMinutes, lastRun }`. **200 healthy / 503 stale·stuck·error** — point an uptime monitor here. |
 
 ## Local development
 
@@ -147,7 +148,19 @@ Manual sync (e.g. before CS shares a link):
 curl -X POST https://<domain>/api/sync -H "x-relay-sync-key: $RELAY_SYNC_KEY"
 ```
 
-Health: query `sync_runs` (newest first) — `status` ok/error, `cases_upserted`, `error` text.
+**Observability (IAI-239).** Two failure modes, two mechanisms:
+- **Explicit errors** (SF auth, Supabase, SOQL) → the sync posts a Slack alert to `SLACK_ALERT_WEBHOOK_URL`.
+- **Silent timeouts** (function killed at `maxDuration`, row stuck `running`) → no code runs, so no
+  alert; caught by `GET /api/health`, which returns **503** when stale/stuck/error. Point an uptime
+  monitor at it (sending the `x-relay-sync-key` header) for hands-off detection.
+
+Quick glance without the endpoint — last few runs straight from Supabase:
+
+```sql
+select started_at, finished_at, status, cases_upserted, error
+from sync_runs order by started_at desc limit 5;
+```
+
 Known failure modes: OAuth 401 → Connected App client-credentials flow disabled or IP-restricted
 (fix on the SF side); a malformed `sf_account_id` in `accounts` is skipped with a warning rather
 than failing the Bulk query.

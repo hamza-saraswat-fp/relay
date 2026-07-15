@@ -4,6 +4,7 @@
  */
 import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
+import { syncHealth, type SyncRunRow } from "../lib/health";
 
 let failed = 0;
 function assert(cond: boolean, msg: string) {
@@ -42,6 +43,43 @@ console.log("statusToChip (Saffi's mapping):");
   assert(statusToChip("Closed") === "resolved", "Closed → resolved");
   assert(statusToChip("Merged") === "resolved", "Merged → resolved");
   assert(statusToChip("Some Unknown Status") === "in_progress", "unknown → in_progress (safe default)");
+}
+
+console.log("syncHealth (IAI-239):");
+{
+  const NOW = Date.parse("2026-07-14T18:00:00Z");
+  const min = (m: number) => new Date(NOW - m * 60000).toISOString();
+  const row = (o: Partial<SyncRunRow> = {}): SyncRunRow => ({
+    started_at: min(5), finished_at: min(4), status: "ok", cases_upserted: 5, error: null, ...o,
+  });
+
+  assert(syncHealth([], NOW).state === "never_run", "no runs → never_run");
+  assert(syncHealth([], NOW).healthy === false, "never_run → not healthy");
+  assert(syncHealth([row()], NOW).state === "ok", "recent ok run → ok");
+  assert(syncHealth([row()], NOW).healthy === true, "recent ok run → healthy (200)");
+  assert(
+    syncHealth([row({ started_at: min(9 * 60 + 5), finished_at: min(9 * 60) })], NOW).state === "stale",
+    "ok run finished 9h ago → stale",
+  );
+  assert(
+    syncHealth([row({ started_at: min(30), finished_at: null, status: "running" })], NOW).state === "stuck",
+    "running >15m → stuck (killed function)",
+  );
+  assert(
+    syncHealth([row({ started_at: min(2), finished_at: null, status: "running" })], NOW).state === "ok",
+    "running <15m → ok (in progress)",
+  );
+  assert(
+    syncHealth([row({ status: "error", error: "boom" })], NOW).state === "error",
+    "latest run errored → error",
+  );
+  assert(
+    syncHealth(
+      [row({ started_at: min(100) }), row({ started_at: min(1), finished_at: null, status: "running" })],
+      NOW,
+    ).lastRun?.status === "running",
+    "picks the newest run by started_at regardless of order",
+  );
 }
 
 if (failed > 0) {
