@@ -13,6 +13,9 @@
   --quartz: var(--fp-quartz);
   --green: var(--fp-success);
   --green-050: var(--fp-success-050);
+  --green-100: var(--fp-success-100);
+  --sky-100: var(--fp-sky-100);
+  --quartz-100: var(--fp-quartz-100);
   --ink: var(--fp-ink);
   --ink-2: var(--fp-ink-2);
   --ink-3: var(--fp-ink-3);
@@ -47,7 +50,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 0 4px;
+  padding: 20px 0 14px;
+  border-bottom: 1px solid var(--line);
 }
 /* baseline (not center): an <img>'s CSS baseline is its bottom edge, so this
    pins the logo's bottom to the label text's baseline precisely. */
@@ -93,8 +97,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 28px;
-  align-items: start;
-  margin-top: 22px;
+  align-items: center;
+  margin-top: 30px;
 }
 .h1 {
   font-family: var(--disp);
@@ -111,13 +115,13 @@
   max-width: 42ch;
 }
 
-/* summary card: a compact horizontal stat strip rather than stacked rows */
+/* summary: one unified card again, divided rather than separated */
 .summary {
   background: linear-gradient(165deg, #0a0f57, #00042f);
   border-radius: 16px;
-  padding: 20px 24px;
+  padding: 20px 22px;
   color: #eaf0ff;
-  box-shadow: 0 20px 44px -22px rgba(0, 3, 77, 0.5);
+  box-shadow: 0 18px 36px -20px rgba(0, 3, 77, 0.5);
 }
 .sumHead {
   font-size: 10.5px;
@@ -125,7 +129,7 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--aqua);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .sumStats {
   display: flex;
@@ -135,28 +139,31 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
   padding: 0 14px;
-  border-left: 1px solid rgba(139, 142, 214, 0.2);
+  border-left: 1px solid rgba(139, 142, 214, 0.25);
 }
 .sumStat:first-child { padding-left: 0; border-left: 0; }
+.sumStat:last-child { padding-right: 0; }
 .sumN {
   font-family: var(--disp);
   font-weight: 800;
-  font-size: 28px;
+  font-size: 34px;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: #fff;
 }
-.sumL { font-size: 12px; line-height: 1.3; color: #aeb6ee; font-weight: 500; }
+.sumL { font-size: 12px; line-height: 1.35; color: #d3d9f9; font-weight: 600; }
 .sumYou .sumN { color: var(--aqua); }
 .sumFoot {
   font-size: 11px;
-  color: #7b83c8;
+  color: #8890cf;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(139, 142, 214, 0.15);
+  border-top: 1px solid rgba(139, 142, 214, 0.18);
 }
 
 /* section head */
@@ -228,9 +235,9 @@
 }
 .chipIcon { width: 14px; height: 14px; flex: none; }
 .chip_you { background: var(--cobalt); color: #fff; }
-.chip_working { background: #edf2fc; color: #2f4f96; border-color: #cedcf4; }
-.chip_queued { background: #f2f3f9; color: var(--ink-3); border-color: var(--line); }
-.chip_resolved { background: var(--green-050); color: var(--green); border-color: #c2ded1; }
+.chip_working { background: var(--sky-100); color: #1c3568; border-color: #a9c0e8; }
+.chip_queued { background: var(--quartz-100); color: #34366e; border-color: #b9bbe6; }
+.chip_resolved { background: var(--green-100); color: #145b3f; border-color: #9cc9b3; }
 .subject {
   font-size: 19px;
   font-weight: 700;
@@ -351,19 +358,19 @@
 /* phone */
 @media (max-width: 560px) {
   .wrap { padding: 0 16px 84px; }
-  .bar { padding: 16px 0 2px; }
+  .bar { padding: 16px 0 10px; }
   .logo { height: 20px; }
   .barDivider { height: 15px; }
   .barLabel { font-size: 16px; }
   .synced { padding: 6px 12px; font-size: 12px; }
-  .hero { margin-top: 14px; }
+  .hero { margin-top: 18px; }
   .h1 { font-size: clamp(22px, 7vw, 28px); }
   .lede { font-size: 14.5px; margin-top: 8px; }
-  .summary { padding: 16px 18px; border-radius: 14px; }
+  .summary { padding: 16px 14px; border-radius: 14px; }
   .sumHead { margin-bottom: 10px; }
-  .sumStat { padding: 0 8px; gap: 2px; }
-  .sumN { font-size: 21px; }
-  .sumL { font-size: 10.5px; }
+  .sumStat { padding: 0 8px; }
+  .sumN { font-size: 25px; }
+  .sumL { font-size: 10px; }
   .sumFoot { margin-top: 10px; padding-top: 10px; }
   .sec { margin: 40px 0 14px; }
   .sec h2 { font-size: 20px; }
