@@ -2,6 +2,7 @@ import { getServiceClient } from "./supabase";
 import { runBulkQuery } from "./salesforce";
 import { statusToChip } from "./status";
 import { cleanUpdate } from "./update-cleaner";
+import { notifySyncFailure } from "./alert";
 
 /**
  * Salesforce → Supabase sync (IAI-212). READ-ONLY against Salesforce: pulls cases +
@@ -81,6 +82,7 @@ export async function runSync(): Promise<SyncResult> {
     .from("accounts")
     .select("id, sf_account_id");
   if (knownErr) {
+    await notifySyncFailure({ error: knownErr.message });
     return { status: "error", casesUpserted: 0, accountsUpserted: 0, error: knownErr.message };
   }
   const acctIdBySf = new Map((knownAccts ?? []).map((a) => [a.sf_account_id as string, a.id as string]));
@@ -211,6 +213,7 @@ export async function runSync(): Promise<SyncResult> {
         .update({ finished_at: new Date().toISOString(), status: "error", error: message })
         .eq("id", runId);
     }
+    await notifySyncFailure({ error: message, runId });
     return { status: "error", casesUpserted: 0, accountsUpserted: 0, error: message };
   }
 }
