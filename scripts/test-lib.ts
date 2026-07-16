@@ -5,6 +5,8 @@
 import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
 import { syncHealth, type SyncRunRow } from "../lib/health";
+import { cleanedOrFallback, fallbackFor } from "../lib/data";
+import { containsSensitive, SAFE_FALLBACK } from "../lib/update-cleaner";
 
 let failed = 0;
 function assert(cond: boolean, msg: string) {
@@ -80,6 +82,79 @@ console.log("syncHealth (IAI-239):");
     ).lastRun?.status === "running",
     "picks the newest run by started_at regardless of order",
   );
+}
+
+console.log("status-aware fallbacks (IAI-316):");
+{
+  // fallbackFor: every chip gets copy that agrees with the chip label rendered next to it.
+  assert(
+    fallbackFor("in_progress", false).startsWith("Our team is actively working"),
+    "in_progress → actively-working copy",
+  );
+  assert(
+    !fallbackFor("in_progress", false).includes("email thread"),
+    "in_progress + no email → no email pointer (nothing is there)",
+  );
+  assert(
+    fallbackFor("in_progress", true).includes("full details are in your email thread"),
+    "in_progress + hidden email → points at the thread",
+  );
+  assert(
+    fallbackFor("waiting_for_you", false).startsWith("We're waiting on a reply from you"),
+    "waiting_for_you → leads with needing their reply",
+  );
+  assert(
+    fallbackFor("waiting_for_support", false).includes("in our support queue"),
+    "waiting_for_support → queue copy",
+  );
+  assert(
+    fallbackFor("waiting_for_support", true).includes("full details are in your email thread"),
+    "waiting_for_support + hidden email → points at the thread",
+  );
+  assert(fallbackFor("resolved", false).startsWith("This ticket has been resolved"), "resolved → resolved copy");
+
+  // cleanedOrFallback: what counts as "no real blurb".
+  assert(
+    cleanedOrFallback(null, "in_progress") === fallbackFor("in_progress", false),
+    "missing row → status fallback",
+  );
+  assert(
+    cleanedOrFallback({ cleaned_update: "Real update.", safety_flag: false }, "in_progress") === "Real update.",
+    "real blurb passes through untouched",
+  );
+  assert(
+    cleanedOrFallback(
+      { cleaned_update: "Real but flagged.", safety_flag: true, email_message_at: "2026-07-01T00:00:00Z" },
+      "in_progress",
+    ) === fallbackFor("in_progress", true),
+    "flagged row → status fallback with email pointer",
+  );
+  assert(
+    cleanedOrFallback({ cleaned_update: SAFE_FALLBACK, safety_flag: false }, "waiting_for_support") ===
+      fallbackFor("waiting_for_support", false),
+    "stored legacy generic fallback → replaced with status-aware copy",
+  );
+  assert(
+    cleanedOrFallback({ cleaned_update: "", safety_flag: false, email_message_at: null }, "resolved") ===
+      fallbackFor("resolved", false),
+    "empty blurb → status fallback",
+  );
+}
+
+console.log("containsSensitive scrubber (IAI-316):");
+{
+  // Positives: any of these in a model output must force the fallback.
+  assert(containsSensitive("We issued a credit of $2,453.00 to your account.") !== null, "catches $2,453.00");
+  assert(containsSensitive("a small charge of $18.40 was found") !== null, "catches $18.40");
+  assert(containsSensitive("call us at 469.382.5668 anytime") !== null, "catches 469.382.5668");
+  assert(containsSensitive("reach me at (480) 555-0199 today") !== null, "catches (480) 555-0199");
+  assert(containsSensitive("email techsupport@fieldpulse.com for help") !== null, "catches an email address");
+  // Negatives: normal support-speak must NOT trip it.
+  assert(containsSensitive("We traced this to invoice #70593 and applied a fix.") === null, "invoice numbers OK");
+  assert(containsSensitive("Our team is available 24/7 for urgent issues.") === null, "24/7 OK");
+  assert(containsSensitive("Fixed in version 3.2.1 of the mobile app.") === null, "version strings OK");
+  assert(containsSensitive("We're actively working on this ticket.") === null, "plain updates OK");
+  assert(containsSensitive("Payment #4187 wasn't syncing due to a small mismatch.") === null, "payment ref OK");
 }
 
 if (failed > 0) {

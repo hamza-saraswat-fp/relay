@@ -57,7 +57,10 @@ TIMING: You may be told when the email was sent and today's date. If the email i
 
 FIDELITY: Never invent information that isn't in the email. The CONTEXT fields are for consistency and tone only — never quote them back to the customer.
 
-SAFETY (the page is public): set "sensitive": true if the email contains anything that must not be shown publicly — other customers' names, personal emails or phone numbers, dollar amounts, credentials/API keys/passwords, internal-only system details, or commentary clearly meant for internal staff only.
+SAFETY (the page is public) — sanitize, don't suppress:
+- Your OUTPUT must never contain: any person's name (staff or customer), email addresses, phone numbers, physical addresses, dollar amounts, credentials/API keys/passwords, or another customer's/company's identifying details. Agent signatures and quoted reply threads are noise — ignore them entirely.
+- When the email contains sensitive details, SUMMARIZE AROUND them: describe what happened or what we need without the specifics. e.g. an email about an $18.40 payment mismatch becomes "We found a small mismatch between the payment and invoice amounts and asked you to confirm one detail." A "can we create a test record to reproduce what Marvin is seeing?" email becomes "We've asked to create a test record on your account so we can reproduce the issue."
+- Set "sensitive": true ONLY when the email cannot be faithfully summarized without exposing sensitive content — internal-only staff commentary, credential delivery, or an email whose entire substance IS the sensitive information. A benign update that merely CONTAINS a signature, name, or amount is NOT sensitive — summarize around it.
 
 Respond ONLY with a JSON object of the form {"cleaned": "<1-3 sentence update>", "sensitive": true|false}. No prose, no code fences.`;
 
@@ -73,6 +76,26 @@ function buildUserMessage(rawEmail: string, ctx?: CleanContext): string {
     ? `CONTEXT (for consistency and tone — never quote these back, never mention the dates):\n${lines.join("\n")}\n\n`
     : "";
   return `${context}SUPPORT EMAIL TO CONVERT:\n${rawEmail}`;
+}
+
+/**
+ * Deterministic backstop for the sanitize-not-suppress gate (IAI-316): the model drafts, code
+ * verifies. Run on every model OUTPUT — any hit forces the fallback regardless of what the model
+ * claimed. High-precision patterns only; deliberately does NOT match invoice/ticket numbers
+ * (customer's own, useful) or words like "password" (mentioning one isn't a leak).
+ * Returns a short label of what matched, or null if clean.
+ */
+const SENSITIVE_PATTERNS: [string, RegExp][] = [
+  ["dollar amount", /\$\s?\d[\d,]*(\.\d{2})?/],
+  ["email address", /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/],
+  ["phone number", /\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/],
+];
+
+export function containsSensitive(text: string): string | null {
+  for (const [label, re] of SENSITIVE_PATTERNS) {
+    if (re.test(text)) return label;
+  }
+  return null;
 }
 
 function extractJson(text: string): { cleaned?: string; sensitive?: boolean } | null {
@@ -135,5 +158,12 @@ export async function cleanUpdate(rawEmail: string, ctx?: CleanContext): Promise
   if (parsed.sensitive) {
     return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
   }
-  return { cleaned: parsed.cleaned.trim(), safetyFlag: false, model: MODEL };
+  const cleaned = parsed.cleaned.trim();
+  // Code backstop: even if the model said it's safe, a sensitive pattern in the OUTPUT fails closed.
+  const hit = containsSensitive(cleaned);
+  if (hit) {
+    console.warn(`[relay] cleaner output scrubbed (${hit}) — forcing fallback`);
+    return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
+  }
+  return { cleaned, safetyFlag: false, model: MODEL };
 }
