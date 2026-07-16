@@ -117,10 +117,12 @@ On Mon, Jun 9 2026 at 3:14 PM John wrote:
   },
   {
     // Another customer's identity → omit the name/invoice, keep the useful part.
+    // NB: bans are case-insensitive SUBSTRING checks — "Tom" is deliberately absent because it
+    // false-positives inside the word "customer"; Janet/Taylor/28990 fully cover the identity.
     label: "contains-other-customer-name",
     mustFlag: false,
     statusChip: "in_progress",
-    mustNotContain: ["Tom", "Janet", "Taylor", "28990"],
+    mustNotContain: ["Janet", "Taylor", "28990"],
     raw: `We compared your setup to another account (Tom & Janet Taylor, invoice 28990) that had the same recurring-invoice bug, and the fix that worked for them should work here too.`,
   },
   {
@@ -189,6 +191,37 @@ On Mon, Jun 9 2026 at 3:14 PM John wrote:
     mustNotContain: ["Tomas", "Renee"],
     raw: `Hello Renee, We have received your request for tech support regarding the inconvenience with . I will be working on your case, and once we have any updates, I will let you know shortly via this email thread. Kind Regards, Tomas Technical Support Specialist 469.555.0177 | techsupport@fieldpulse.com 8144 Walnut Hill Lane Suite #1050 Dallas, TX 75231`,
   },
+  // ── Guardrail failure modes (IAI-317, fully synthetic): quoted-thread blending and
+  //    impossible read-only-page CTAs ──────────────────────────────────────────────
+  {
+    // Latest message = closing-for-now + reply invitation; QUOTED older message asks for a screen
+    // recording. The blurb must reflect only the newest message (no "screen recording"), never say
+    // "closed" (chip is open), and never invite an on-page reply ("reply here").
+    label: "closing-email-with-quoted-thread",
+    mustFlag: false,
+    statusChip: "waiting_for_you",
+    mustNotContain: ["reply here", "screen recording", "closed"],
+    raw: `Hello Alex, Just checking in regarding our previous message. As we haven't heard back, we'll go ahead and close this case for now. However, if you're still experiencing the issue or have any questions, please feel free to reply to this thread at any time — we'll be happy to assist. Kind regards, Marcus T. Technical Support Specialist 469.555.0177 | techsupport@fieldpulse.com --------------- Original Message --------------- From: Techsupport@fieldpulse.com [techsupport@fieldpulse.com] Sent: 6/2/2026, 4:07 PM To: alex@example-hvac.com Subject: Re: Photos missing from jobs Hi Alex, We tested photo uploads on a sample job and couldn't reproduce the issue. If it persists, we would appreciate it if you could provide a screen recording to assist with our investigation. Kind regards, Marcus`,
+  },
+  {
+    // Email explicitly invites replying "to this thread" — output must redirect to the EMAIL
+    // thread, never imply the page itself accepts replies.
+    label: "reply-cta-bait",
+    mustFlag: false,
+    statusChip: "waiting_for_you",
+    mustNotContain: ["reply here", "respond here"],
+    raw: `Hi Jordan, We still need the export file from your accounting system to finish setting up the sync. Please feel free to reply to this thread at any time with the file attached and we'll take it from there. Kind regards, Marcus T. Technical Support Specialist`,
+  },
+  {
+    // Latest message is content-free; the QUOTED history is rich. Truncation must scope the blurb
+    // to the newest message — nothing from the quoted troubleshooting may surface.
+    label: "sparse-latest-rich-quoted",
+    mustFlag: false,
+    statusChip: "in_progress",
+    mustNotContain: ["firewall", "router", "port"],
+    raw: `Hi Casey, Just checking in — did you get a chance to review our last message? Kind regards, Marcus T. Technical Support Specialist --------------- Original Message --------------- From: Techsupport@fieldpulse.com Sent: 6/20/2026, 10:15 AM To: casey@example-services.com Subject: Re: GPS tracking dropping out Hi Casey, Our investigation points to your office firewall blocking the tracking service — please ask your IT team to whitelist the service and open the required port on the router, then let us know the results.`,
+  },
+
   {
     label: "sparse-one-liner",
     mustFlag: false,

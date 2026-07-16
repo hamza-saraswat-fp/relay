@@ -13,8 +13,71 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { cleanUpdate, SAFE_FALLBACK, type CleanResult } from "../lib/update-cleaner";
+import { cleanUpdate, verifyFaithful, SAFE_FALLBACK, type CleanResult } from "../lib/update-cleaner";
 import { EMAIL_FIXTURES, type EmailFixture } from "../lib/fixtures/emails";
+
+/**
+ * Gate self-test (IAI-317): hand-built (source, blurb) pairs fed straight to the runtime
+ * faithfulness gate. A wrong verdict on any of these is a HARD failure — the gate is the
+ * last line of defense in production, so it must demonstrably catch fabrication and
+ * impossible CTAs while letting a faithful summary through.
+ */
+const GATE_SELF_TESTS: {
+  label: string;
+  source: string;
+  blurb: string;
+  ctx?: { subject?: string; statusChip?: EmailFixture["statusChip"] };
+  expectPass: boolean;
+}[] = [
+  {
+    label: "faithful summary → must PASS",
+    source:
+      "Hi, we've reproduced the arrival-window issue and confirmed it's a defect. A fix is in testing now and we expect an update within the week.",
+    blurb:
+      "We've reproduced the arrival-window issue and confirmed it's a bug on our end — a fix is in testing and we expect an update soon.",
+    expectPass: true,
+  },
+  {
+    // Shadow-run lesson: the generator legitimately names the issue from the ticket SUBJECT when
+    // the email is generic — the gate must not call that fabrication.
+    label: "issue named from ticket subject (generic email) → must PASS",
+    source:
+      "Hi, we have received your request and are looking into the issue. We will follow up via this email thread once we have any updates.",
+    blurb:
+      "We've received your report about text messages not delivering and our team is actively looking into it — we'll post an update here as soon as there's news.",
+    ctx: { subject: "Engage Text Messages Not Delivering", statusChip: "in_progress" },
+    expectPass: true,
+  },
+  {
+    // Shadow-run lesson: status policy — open chip + "closing the case" email must be framed as
+    // paused, and the gate must not fail that required softening.
+    label: "closed-email softened to paused per status policy → must PASS",
+    source:
+      "As we haven't heard back, we'll go ahead and close this case for now. If you're still experiencing the issue, feel free to reply to this thread at any time.",
+    blurb:
+      "We haven't heard back yet, so this is paused for now — if you're still running into the issue, just reply to your email thread and we'll pick it right back up.",
+    ctx: { subject: "Photos missing from jobs", statusChip: "waiting_for_you" },
+    expectPass: true,
+  },
+  {
+    label: "fabricated claim (refund never mentioned) → must FAIL",
+    source:
+      "Hi, we're still investigating the duplicate charge you reported and will follow up once we know more.",
+    blurb:
+      "Good news — we've issued a full refund for the duplicate charge and corrected your payment records.",
+    expectPass: false,
+  },
+  {
+    label: "impossible CTA (reply on a read-only page) → must FAIL",
+    source:
+      "Hi, if you're still experiencing the issue, please feel free to reply to this thread at any time.",
+    blurb:
+      "If you're still running into this, just reply right here on this page and we'll pick it back up.",
+    expectPass: false,
+  },
+];
+
+interface GateResult { label: string; expectPass: boolean; got: boolean; reason: string; correct: boolean }
 
 const MODEL = "anthropic/claude-sonnet-5";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -112,22 +175,42 @@ async function main() {
     if (row.hardFails.length) console.log(`        ${row.hardFails.join(" | ")}`);
   }
 
+  // Gate self-test: the runtime faithfulness gate itself must verdict correctly.
+  console.log("\nfaithfulness-gate self-test:");
+  const gateResults: GateResult[] = [];
+  for (const t of GATE_SELF_TESTS) {
+    const v = await verifyFaithful(t.source, t.blurb, t.ctx);
+    const correct = v.pass === t.expectPass;
+    gateResults.push({ label: t.label, expectPass: t.expectPass, got: v.pass, reason: v.reason, correct });
+    console.log(`  [${correct ? "✓" : "✗ HARD"}] ${t.label}${correct ? "" : ` — got pass=${v.pass}: ${v.reason}`}`);
+  }
+  const gateFails = gateResults.filter((g) => !g.correct).length;
+
   const day = new Date().toISOString().slice(0, 10);
   const reportPath = path.join(process.cwd(), "..", "docs", `relay-cleaner-eval-${day}.md`);
-  fs.writeFileSync(reportPath, report(rows, day));
+  fs.writeFileSync(reportPath, report(rows, gateResults, day));
 
   const hard = rows.filter((r) => r.hardFails.length).length;
   const review = rows.filter((r) => !r.hardFails.length && (r.review.length || r.warns.length)).length;
-  console.log(`\n${rows.length} fixtures · ${rows.length - hard - review} clean · ${review} review · ${hard} HARD FAIL`);
+  console.log(`\n${rows.length} fixtures · ${rows.length - hard - review} clean · ${review} review · ${hard} HARD FAIL · gate self-test ${gateResults.length - gateFails}/${gateResults.length}`);
   console.log(`Report: ${reportPath}`);
-  if (hard) process.exit(1);
+  if (hard || gateFails) process.exit(1);
 }
 
-function report(rows: Row[], day: string): string {
+function report(rows: Row[], gateResults: GateResult[], day: string): string {
   const L: string[] = [`# Relay — cleaner brain-trust eval ${day}`, ""];
   const hard = rows.filter((r) => r.hardFails.length).length;
   const review = rows.filter((r) => !r.hardFails.length && (r.review.length || r.warns.length)).length;
-  L.push(`**${rows.length - hard - review} clean · ${review} review · ${hard} hard fail.** Deterministic checks + 3-lens LLM judge panel (faithfulness / status-consistency+voice / public-safety). Hard fail = deterministic failure or safety-lens failure.`);
+  const gateOk = gateResults.filter((g) => g.correct).length;
+  L.push(`**${rows.length - hard - review} clean · ${review} review · ${hard} hard fail · gate self-test ${gateOk}/${gateResults.length}.** Deterministic checks + 3-lens LLM judge panel (faithfulness / status-consistency+voice / public-safety) + runtime faithfulness-gate self-test. Hard fail = deterministic failure, safety-lens failure, or wrong gate verdict.`);
+  L.push("");
+  L.push("## Runtime faithfulness-gate self-test (IAI-317)");
+  L.push("");
+  L.push("| Case | Expected | Gate verdict | Correct |");
+  L.push("|---|---|---|---|");
+  for (const g of gateResults) {
+    L.push(`| ${g.label} | ${g.expectPass ? "pass" : "fail"} | ${g.got ? "pass" : "fail"} — ${g.reason} | ${g.correct ? "✅" : "❌"} |`);
+  }
   L.push("");
   L.push("| Fixture | Status | Flag | Faith | Voice/consistency | Safety | Verdict |");
   L.push("|---|---|---|---|---|---|---|");
