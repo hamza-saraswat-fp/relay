@@ -1,5 +1,6 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
+import { SAFE_FALLBACK } from "./update-cleaner";
 
 /**
  * Single data-access seam for the customer page. Reads live Supabase when
@@ -32,20 +33,21 @@ async function getAccountViewFromSupabase(
   const { data: rows, error: caseErr } = await supabase
     .from("cases")
     .select(
-      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag)"
+      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag, email_message_at)"
     )
     .eq("account_id", account.id);
   if (caseErr) throw caseErr;
 
   const tickets: Ticket[] = (rows ?? []).map((r) => {
     const upd = Array.isArray(r.case_updates) ? r.case_updates[0] : r.case_updates;
+    const chip = r.status_chip as StatusChip;
     return {
       subject: r.subject as string,
-      chip: r.status_chip as StatusChip,
+      chip,
       openedISO: r.created_date as string,
       lastActivityISO: r.last_modified as string,
       resolvedDateISO: (r.closed_date as string | null) ?? undefined,
-      latestUpdate: cleanedOrFallback(upd),
+      latestUpdate: cleanedOrFallback(upd, chip),
     };
   });
 
@@ -56,12 +58,47 @@ async function getAccountViewFromSupabase(
   };
 }
 
-const SAFE_FALLBACK =
-  "Our team posted an update on this ticket — check your email thread for details.";
+/** A hidden email exists (flagged/suppressed) — the thread has real content worth pointing at. */
+const HIDDEN_EMAIL_SUFFIX = " The full details are in your email thread.";
 
-function cleanedOrFallback(
-  upd: { cleaned_update?: string | null; safety_flag?: boolean | null } | null | undefined
+/**
+ * Status-aware fallback copy (IAI-316). Shown when there is no publishable cleaned update —
+ * either no outbound email exists yet, or the cleaner failed closed. Must never contradict the
+ * status chip rendered next to it (the pilot's "check your email" on an "Our team is on it"
+ * ticket problem).
+ */
+export function fallbackFor(chip: StatusChip, hasHiddenEmail: boolean): string {
+  switch (chip) {
+    case "in_progress":
+      return (
+        "Our team is actively working on this ticket — we'll post an update here as soon as there's news." +
+        (hasHiddenEmail ? HIDDEN_EMAIL_SUFFIX : "")
+      );
+    case "waiting_for_you":
+      return "We're waiting on a reply from you to keep this moving — check your email thread for our latest message.";
+    case "waiting_for_support":
+      return (
+        "This ticket is in our support queue — we'll post an update here once our team picks it up." +
+        (hasHiddenEmail ? HIDDEN_EMAIL_SUFFIX : "")
+      );
+    case "resolved":
+      return "This ticket has been resolved. If anything still looks off, just reply to your email thread.";
+  }
+}
+
+export function cleanedOrFallback(
+  upd:
+    | {
+        cleaned_update?: string | null;
+        safety_flag?: boolean | null;
+        email_message_at?: string | null;
+      }
+    | null
+    | undefined,
+  chip: StatusChip
 ): string {
-  if (!upd || upd.safety_flag || !upd.cleaned_update) return SAFE_FALLBACK;
-  return upd.cleaned_update;
+  const noRealBlurb =
+    !upd || upd.safety_flag || !upd.cleaned_update || upd.cleaned_update === SAFE_FALLBACK;
+  if (noRealBlurb) return fallbackFor(chip, Boolean(upd?.email_message_at));
+  return upd.cleaned_update as string;
 }
