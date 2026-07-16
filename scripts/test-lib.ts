@@ -6,7 +6,12 @@ import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
 import { syncHealth, type SyncRunRow } from "../lib/health";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
-import { containsSensitive, SAFE_FALLBACK } from "../lib/update-cleaner";
+import {
+  containsSensitive,
+  containsBannedCta,
+  latestMessageOnly,
+  SAFE_FALLBACK,
+} from "../lib/update-cleaner";
 
 let failed = 0;
 function assert(cond: boolean, msg: string) {
@@ -155,6 +160,51 @@ console.log("containsSensitive scrubber (IAI-316):");
   assert(containsSensitive("Fixed in version 3.2.1 of the mobile app.") === null, "version strings OK");
   assert(containsSensitive("We're actively working on this ticket.") === null, "plain updates OK");
   assert(containsSensitive("Payment #4187 wasn't syncing due to a small mismatch.") === null, "payment ref OK");
+}
+
+console.log("latestMessageOnly quoted-thread truncation (IAI-317):");
+{
+  const fp = latestMessageOnly(
+    "We're closing this for now — reply anytime. Kind regards, Dave --------------- Original Message --------------- From: Techsupport Sent: 4/24/2026 If the issue persists, please provide a screen recording.",
+  );
+  assert(fp.includes("closing this for now"), "keeps the newest message (FieldPulse separator)");
+  assert(!fp.includes("screen recording"), "drops quoted history below the FieldPulse separator");
+
+  const gm = latestMessageOnly(
+    "Once you confirm the tax codes, we can apply the fix. On Mon, Jun 9 2026 at 3:14 PM John wrote: The invoice still isn't showing up.",
+  );
+  assert(gm.includes("apply the fix"), "keeps the newest message (Gmail separator)");
+  assert(!gm.includes("invoice still isn't showing"), "drops quoted history below 'On … wrote:'");
+
+  assert(
+    latestMessageOnly("Just a single message with no quoted thread.") ===
+      "Just a single message with no quoted thread.",
+    "no separator → passthrough",
+  );
+  assert(
+    !latestMessageOnly("Thanks for your patience. thread::Il4qbrbcJEWF5KbHD0dBMyY:: See you soon.").includes(
+      "thread::",
+    ),
+    "strips salesforce thread:: tokens",
+  );
+  const both = latestMessageOnly(
+    "Newest. --------------- Original Message --------------- Middle. On Jan 2 2026 at 9:00 AM Sam wrote: Oldest.",
+  );
+  assert(both === "Newest.", "cuts at the first separator when both kinds appear");
+}
+
+console.log("containsBannedCta read-only-page guard (IAI-317):");
+{
+  assert(containsBannedCta("just reply here and we'll pick this back up") !== null, "catches 'reply here'");
+  assert(containsBannedCta("please respond here at your convenience") !== null, "catches 'respond here'");
+  assert(containsBannedCta("let us know here if it happens again") !== null, "catches 'let us know here'");
+  assert(containsBannedCta("Reply below with the invoice number") !== null, "catches 'reply below'");
+  assert(
+    containsBannedCta("just reply to your email thread and we'll pick this back up") === null,
+    "'reply to your email thread' is the CORRECT phrasing — allowed",
+  );
+  assert(containsBannedCta("let us know if you're still seeing this") === null, "'let us know if …' allowed");
+  assert(containsBannedCta("we'll post an update here as soon as there's news") === null, "'update here' allowed");
 }
 
 if (failed > 0) {
