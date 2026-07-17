@@ -1,6 +1,6 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
-import { SAFE_FALLBACK } from "./update-cleaner";
+import { SAFE_FALLBACK, containsSensitive } from "./update-cleaner";
 
 /**
  * Single data-access seam for the customer page. Reads live Supabase when
@@ -33,7 +33,7 @@ async function getAccountViewFromSupabase(
   const { data: rows, error: caseErr } = await supabase
     .from("cases")
     .select(
-      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag, email_message_at)"
+      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag, email_message_at, email_subject)"
     )
     .eq("account_id", account.id);
   if (caseErr) throw caseErr;
@@ -48,6 +48,8 @@ async function getAccountViewFromSupabase(
       lastActivityISO: r.last_modified as string,
       resolvedDateISO: (r.closed_date as string | null) ?? undefined,
       latestUpdate: cleanedOrFallback(upd, chip),
+      lastReplyISO: (upd?.email_message_at as string | null) ?? undefined,
+      emailSubject: safeSubject(upd?.email_subject as string | null | undefined),
     };
   });
 
@@ -56,6 +58,18 @@ async function getAccountViewFromSupabase(
     lastUpdatedISO: account.updated_at as string,
     tickets,
   };
+}
+
+/**
+ * The email subject is shown verbatim on the PUBLIC page (IAI-318), so it passes the same
+ * deterministic scrubber as cleaned updates: if a subject somehow carries a dollar amount, email,
+ * or phone number, drop it (the reference line still shows the date). Trims and collapses
+ * whitespace; empty → undefined.
+ */
+export function safeSubject(raw: string | null | undefined): string | undefined {
+  const s = raw?.replace(/\s+/g, " ").trim();
+  if (!s) return undefined;
+  return containsSensitive(s) ? undefined : s;
 }
 
 /** A hidden email exists (flagged/suppressed) — the thread has real content worth pointing at. */
