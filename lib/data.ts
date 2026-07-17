@@ -60,16 +60,24 @@ async function getAccountViewFromSupabase(
   };
 }
 
+/** A searchable handle, not a paragraph — some Salesforce EmailMessage.Subject values contain the
+ *  whole first message. Past this we truncate to a clean, bounded string. */
+const MAX_SUBJECT_LEN = 80;
+
 /**
- * The email subject is shown verbatim on the PUBLIC page (IAI-318), so it passes the same
- * deterministic scrubber as cleaned updates: if a subject somehow carries a dollar amount, email,
- * or phone number, drop it (the reference line still shows the date). Trims and collapses
- * whitespace; empty → undefined.
+ * The email subject is shown on the PUBLIC page (IAI-318), so it passes the same deterministic
+ * scrubber as cleaned updates: if a subject somehow carries a dollar amount, email, or phone
+ * number, drop it (the reference line still shows the date). Trims/collapses whitespace and caps
+ * an over-long Subject header at a word boundary so it stays a clean, searchable handle.
  */
 export function safeSubject(raw: string | null | undefined): string | undefined {
   const s = raw?.replace(/\s+/g, " ").trim();
   if (!s) return undefined;
-  return containsSensitive(s) ? undefined : s;
+  if (containsSensitive(s)) return undefined;
+  if (s.length <= MAX_SUBJECT_LEN) return s;
+  const cut = s.slice(0, MAX_SUBJECT_LEN);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).replace(/[\s.,;:–—-]+$/, "")}…`;
 }
 
 /** A hidden email exists (flagged/suppressed) — the thread has real content worth pointing at. */

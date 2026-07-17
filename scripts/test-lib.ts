@@ -216,6 +216,15 @@ console.log("safeSubject email-thread reference (IAI-318):");
   assert(safeSubject("Re: refund of $2,453.00 processed") === undefined, "subject with $ amount is dropped");
   assert(safeSubject("Re: call me at (480) 555-0199") === undefined, "subject with phone number is dropped");
   assert(safeSubject("Re: email me at ops@acme.com") === undefined, "subject with email address is dropped");
+  {
+    const long =
+      "Work Orders Not Consistently Linked to Projects (Broken Hierarchy: Estimate to Project to Work Order) Scenario Description reproduction steps and environment details";
+    const capped = safeSubject(long)!;
+    assert(capped.length <= 81, "over-long subject is capped to a bounded handle");
+    assert(capped.endsWith("…"), "capped subject ends with an ellipsis");
+    assert(!/\s…$/.test(capped), "no dangling space before the ellipsis");
+    assert(long.startsWith(capped.replace(/…$/, "")), "cap is a clean prefix of the original");
+  }
 }
 
 if (failed > 0) {
