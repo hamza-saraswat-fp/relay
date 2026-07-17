@@ -46,7 +46,7 @@ function caseSoql(accountIds: string[]): string {
 function emailSoql(caseIds: string[]): string {
   const ids = caseIds.map((id) => `'${id}'`).join(",");
   return (
-    `SELECT ParentId, MessageDate, TextBody, HtmlBody FROM EmailMessage ` +
+    `SELECT ParentId, MessageDate, Subject, TextBody, HtmlBody FROM EmailMessage ` +
     `WHERE Incoming = false AND ParentId IN (${ids}) ORDER BY MessageDate DESC`
   );
 }
@@ -180,6 +180,7 @@ export async function runSync(): Promise<SyncResult> {
           {
             case_id: caseId,
             email_message_at: email?.MessageDate || null,
+            email_subject: email?.Subject || null,
             raw_body: source || null,
             cleaned_update: cleaned.cleaned,
             safety_flag: cleaned.safetyFlag,

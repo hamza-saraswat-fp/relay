@@ -50,6 +50,15 @@ function IconCheck() {
     </svg>
   );
 }
+// Small envelope glyph for the email-thread reference line (IAI-318).
+function IconMail() {
+  return (
+    <svg className={styles.threadIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
+  );
+}
 // Disclosure chevron: sideways when collapsed, rotates to point down when open
 // (styles.rez[open] .rchev handles the rotation).
 function IconChevron() {
@@ -201,6 +210,16 @@ function TicketCard({ t }: { t: Ticket }) {
           <span>Opened <b>{fmtDate(t.openedISO)}</b></span>
           <span>Updated <b>{fmtDate(t.lastActivityISO)}</b></span>
         </div>
+        {attn && t.lastReplyISO && (
+          <div className={styles.thread}>
+            <IconMail />
+            <span className={styles.threadText}>
+              Email thread
+              {t.emailSubject ? <> · <span className={styles.threadSubj}>“{t.emailSubject}”</span></> : null}
+              {" "}· last reply <b>{fmtDate(t.lastReplyISO)}</b>
+            </span>
+          </div>
+        )}
       </div>
       <div className={styles.update}>
         <div className={styles.updLabel}>Latest update</div>

@@ -17,6 +17,8 @@ export const SEED_ACCOUNTS: Record<string, AccountView> = {
         chip: "waiting_for_you",
         openedISO: "2026-01-15",
         lastActivityISO: "2026-06-10",
+        lastReplyISO: "2026-06-10T15:22:00Z",
+        emailSubject: "Re: Invoice #70593 not syncing to QuickBooks",
         latestUpdate:
           "We traced the sync failure to a mismatched tax mapping on this invoice. We've sent over two questions about how your QuickBooks tax codes are set up — once we hear back, the fix is ready to apply on our side.",
       },
