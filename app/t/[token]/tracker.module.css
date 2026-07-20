@@ -256,26 +256,6 @@
 }
 .meta b { color: var(--ink-2); font-weight: 600; }
 
-/* email-thread reference (IAI-318) — helps the customer find the thread in their inbox */
-.thread {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--ink-4);
-}
-.threadIcon { width: 13px; height: 13px; flex: none; opacity: 0.8; }
-.threadText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.threadText b { color: var(--ink-2); font-weight: 600; }
-.threadSubj { color: var(--ink-3); font-style: italic; }
-
 /* latest update */
 .update {
   background: var(--line-2);

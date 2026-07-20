@@ -18,11 +18,6 @@ export interface Ticket {
   lastActivityISO: string;
   latestUpdate: string;
   resolvedDateISO?: string;
-  /** Newest outbound email's date — the "last reply from our team" (IAI-318). */
-  lastReplyISO?: string;
-  /** Newest outbound email's subject line — the searchable thread handle in the customer's
-   *  inbox. Already safety-scrubbed in the data layer (undefined if it tripped the scrubber). */
-  emailSubject?: string;
 }
 
 export interface AccountView {

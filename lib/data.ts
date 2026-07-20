@@ -1,6 +1,6 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
-import { SAFE_FALLBACK, containsSensitive } from "./update-cleaner";
+import { SAFE_FALLBACK } from "./update-cleaner";
 
 /**
  * Single data-access seam for the customer page. Reads live Supabase when
@@ -33,7 +33,7 @@ async function getAccountViewFromSupabase(
   const { data: rows, error: caseErr } = await supabase
     .from("cases")
     .select(
-      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag, email_message_at, email_subject)"
+      "subject, status_chip, created_date, last_modified, closed_date, case_updates(cleaned_update, safety_flag, email_message_at)"
     )
     .eq("account_id", account.id);
   if (caseErr) throw caseErr;
@@ -48,8 +48,6 @@ async function getAccountViewFromSupabase(
       lastActivityISO: r.last_modified as string,
       resolvedDateISO: (r.closed_date as string | null) ?? undefined,
       latestUpdate: cleanedOrFallback(upd, chip),
-      lastReplyISO: (upd?.email_message_at as string | null) ?? undefined,
-      emailSubject: safeSubject(upd?.email_subject as string | null | undefined),
     };
   });
 
@@ -58,26 +56,6 @@ async function getAccountViewFromSupabase(
     lastUpdatedISO: account.updated_at as string,
     tickets,
   };
-}
-
-/** A searchable handle, not a paragraph — some Salesforce EmailMessage.Subject values contain the
- *  whole first message. Past this we truncate to a clean, bounded string. */
-const MAX_SUBJECT_LEN = 80;
-
-/**
- * The email subject is shown on the PUBLIC page (IAI-318), so it passes the same deterministic
- * scrubber as cleaned updates: if a subject somehow carries a dollar amount, email, or phone
- * number, drop it (the reference line still shows the date). Trims/collapses whitespace and caps
- * an over-long Subject header at a word boundary so it stays a clean, searchable handle.
- */
-export function safeSubject(raw: string | null | undefined): string | undefined {
-  const s = raw?.replace(/\s+/g, " ").trim();
-  if (!s) return undefined;
-  if (containsSensitive(s)) return undefined;
-  if (s.length <= MAX_SUBJECT_LEN) return s;
-  const cut = s.slice(0, MAX_SUBJECT_LEN);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).replace(/[\s.,;:–—-]+$/, "")}…`;
 }
 
 /** A hidden email exists (flagged/suppressed) — the thread has real content worth pointing at. */

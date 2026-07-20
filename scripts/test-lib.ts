@@ -5,7 +5,7 @@
 import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
 import { syncHealth, type SyncRunRow } from "../lib/health";
-import { cleanedOrFallback, fallbackFor, safeSubject } from "../lib/data";
+import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
   containsBannedCta,
@@ -205,26 +205,6 @@ console.log("containsBannedCta read-only-page guard (IAI-317):");
   );
   assert(containsBannedCta("let us know if you're still seeing this") === null, "'let us know if …' allowed");
   assert(containsBannedCta("we'll post an update here as soon as there's news") === null, "'update here' allowed");
-}
-
-console.log("safeSubject email-thread reference (IAI-318):");
-{
-  assert(safeSubject("Re: Disappearing Photos in the Field") === "Re: Disappearing Photos in the Field", "normal subject passes through");
-  assert(safeSubject("  Re:   Site Visit   on Schedule  ") === "Re: Site Visit on Schedule", "trims + collapses whitespace");
-  assert(safeSubject(null) === undefined, "null → undefined");
-  assert(safeSubject("") === undefined, "empty → undefined");
-  assert(safeSubject("Re: refund of $2,453.00 processed") === undefined, "subject with $ amount is dropped");
-  assert(safeSubject("Re: call me at (480) 555-0199") === undefined, "subject with phone number is dropped");
-  assert(safeSubject("Re: email me at ops@acme.com") === undefined, "subject with email address is dropped");
-  {
-    const long =
-      "Work Orders Not Consistently Linked to Projects (Broken Hierarchy: Estimate to Project to Work Order) Scenario Description reproduction steps and environment details";
-    const capped = safeSubject(long)!;
-    assert(capped.length <= 81, "over-long subject is capped to a bounded handle");
-    assert(capped.endsWith("…"), "capped subject ends with an ellipsis");
-    assert(!/\s…$/.test(capped), "no dangling space before the ellipsis");
-    assert(long.startsWith(capped.replace(/…$/, "")), "cap is a clean prefix of the original");
-  }
 }
 
 if (failed > 0) {
