@@ -50,6 +50,15 @@ function IconCheck() {
     </svg>
   );
 }
+// Envelope glyph for the "how to reply" notice.
+function IconMailNote() {
+  return (
+    <svg className={styles.noticeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
+    </svg>
+  );
+}
 // Disclosure chevron: sideways when collapsed, rotates to point down when open
 // (styles.rez[open] .rchev handles the rotation).
 function IconChevron() {
@@ -138,6 +147,15 @@ export default async function TrackerPage({
             </div>
           </aside>
         </section>
+
+        <div className={styles.notice}>
+          <IconMailNote />
+          <span>
+            <b>Need to reply to a ticket?</b> Just reply to the email thread you already have with
+            our support team — each ticket&apos;s title is the subject line of that email, so you can
+            search your inbox to find it.
+          </span>
+        </div>
 
         <div className={styles.sec}>
           <h2>Open tickets</h2>
