@@ -167,6 +167,23 @@
 }
 
 /* section head */
+/* top "how to reply" notice — same guidance as the footer, surfaced above the tickets */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 13px 16px;
+  background: var(--line-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.noticeIcon { width: 16px; height: 16px; flex: none; color: var(--cobalt); margin-top: 2px; }
+.notice b { color: var(--ink); font-weight: 600; }
+
 .sec {
   display: flex;
   align-items: baseline;
@@ -255,26 +272,6 @@
   color: var(--ink-4);
 }
 .meta b { color: var(--ink-2); font-weight: 600; }
-
-/* email-thread reference (IAI-318) — helps the customer find the thread in their inbox */
-.thread {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--ink-4);
-}
-.threadIcon { width: 13px; height: 13px; flex: none; opacity: 0.8; }
-.threadText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.threadText b { color: var(--ink-2); font-weight: 600; }
-.threadSubj { color: var(--ink-3); font-style: italic; }
 
 /* latest update */
 .update {

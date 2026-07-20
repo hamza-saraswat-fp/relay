@@ -50,10 +50,10 @@ function IconCheck() {
     </svg>
   );
 }
-// Small envelope glyph for the email-thread reference line (IAI-318).
-function IconMail() {
+// Envelope glyph for the "how to reply" notice.
+function IconMailNote() {
   return (
-    <svg className={styles.threadIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg className={styles.noticeIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <path d="m3 7 9 6 9-6" />
     </svg>
@@ -148,6 +148,15 @@ export default async function TrackerPage({
           </aside>
         </section>
 
+        <div className={styles.notice}>
+          <IconMailNote />
+          <span>
+            <b>Need to reply to a ticket?</b> Just reply to the email thread you already have with
+            our support team — each ticket&apos;s title is the subject line of that email, so you can
+            search your inbox to find it.
+          </span>
+        </div>
+
         <div className={styles.sec}>
           <h2>Open tickets</h2>
           <span className={styles.secC}>{open.length} active</span>
@@ -183,7 +192,8 @@ export default async function TrackerPage({
 
         <footer className={styles.footer}>
           <b>Need to reply to a ticket?</b> Just reply to the email thread you already have
-          with our support team. Every ticket above links back to that same conversation.
+          with our support team — each ticket&apos;s title is the subject line of that email, so you
+          can search your inbox to find it. Every ticket above links back to that same conversation.
           General support: <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a>
           <div className={styles.fine}>
             This page is read-only and updates automatically from FieldPulse&apos;s support
@@ -210,16 +220,6 @@ function TicketCard({ t }: { t: Ticket }) {
           <span>Opened <b>{fmtDate(t.openedISO)}</b></span>
           <span>Updated <b>{fmtDate(t.lastActivityISO)}</b></span>
         </div>
-        {attn && t.lastReplyISO && (
-          <div className={styles.thread}>
-            <IconMail />
-            <span className={styles.threadText}>
-              Email thread
-              {t.emailSubject ? <> · <span className={styles.threadSubj}>“{t.emailSubject}”</span></> : null}
-              {" "}· last reply <b>{fmtDate(t.lastReplyISO)}</b>
-            </span>
-          </div>
-        )}
       </div>
       <div className={styles.update}>
         <div className={styles.updLabel}>Latest update</div>
