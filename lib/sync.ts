@@ -1,8 +1,9 @@
 import { getServiceClient } from "./supabase";
 import { runBulkQuery } from "./salesforce";
 import { statusToChip } from "./status";
-import { cleanUpdate } from "./update-cleaner";
+import { cleanUpdate, SAFE_FALLBACK } from "./update-cleaner";
 import { notifySyncFailure } from "./alert";
+import type { StatusChip } from "./types";
 
 /**
  * Salesforce → Supabase sync (IAI-212). READ-ONLY against Salesforce: pulls cases +
@@ -58,6 +59,41 @@ function latestOutboundByCase(rows: Record<string, string>[]): Map<string, Recor
     if (!map.has(r.ParentId)) map.set(r.ParentId, r);
   }
   return map;
+}
+
+/** Prior state for one case, as stored by the previous sync. */
+export interface PriorUpdate {
+  chip?: StatusChip;
+  rawBody?: string | null;
+  cleanedUpdate?: string | null;
+  safetyFlag?: boolean | null;
+}
+
+/**
+ * Should this case's update be re-cleaned by the LLM? (IAI-396)
+ *
+ * The sync pulls every tracked case each run, but re-cleaning unchanged tickets burns ~2 model
+ * calls apiece for an identical result — untenable once the cron runs every 2h. Re-clean only when
+ * the output could actually differ:
+ *  - nothing stored yet;
+ *  - the source email/resolution text changed;
+ *  - the status chip changed (the blurb's framing must follow the chip — see IAI-316);
+ *  - it was safety-flagged, or it fell back *despite having source text* — a retry can still heal
+ *    those (preserves the pre-existing self-healing behaviour for transient infra failures).
+ *
+ * A case with no outbound email at all stores the fallback permanently and legitimately, so it is
+ * NOT a retry candidate — otherwise those tickets would rewrite their row on every single run.
+ */
+export function needsReclean(
+  prev: PriorUpdate | undefined,
+  next: { source: string; chip: StatusChip },
+): boolean {
+  if (!prev || prev.cleanedUpdate == null) return true;
+  if ((prev.rawBody ?? "") !== next.source) return true;
+  if (prev.chip !== next.chip) return true;
+  if (prev.safetyFlag) return true;
+  if (prev.cleanedUpdate === SAFE_FALLBACK && next.source.trim()) return true;
+  return false;
 }
 
 function stripHtml(s: string): string {
@@ -136,6 +172,25 @@ export async function runSync(): Promise<SyncResult> {
     const emailRows = caseIds.length ? await runBulkQuery(emailSoql(caseIds)) : [];
     const latestEmail = latestOutboundByCase(emailRows);
 
+    // 3b. Prior state for the skip-unchanged guard. MUST be read BEFORE the upsert below, which
+    //     overwrites status_chip — after it, the "previous" chip is gone.
+    const { data: priorCases } = caseIds.length
+      ? await supabase.from("cases").select("id, sf_case_id, status_chip").in("sf_case_id", caseIds)
+      : { data: [] };
+    const priorCaseBySf = new Map(
+      (priorCases ?? []).map((c) => [c.sf_case_id as string, c as Record<string, unknown>]),
+    );
+    const priorCaseIds = (priorCases ?? []).map((c) => c.id as string);
+    const { data: priorUpdates } = priorCaseIds.length
+      ? await supabase
+          .from("case_updates")
+          .select("case_id, raw_body, cleaned_update, safety_flag")
+          .in("case_id", priorCaseIds)
+      : { data: [] };
+    const priorUpdateByCaseId = new Map(
+      (priorUpdates ?? []).map((u) => [u.case_id as string, u as Record<string, unknown>]),
+    );
+
     // 4. Upsert cases + case_updates.
     const caseUpserts = caseRows.map((c) => ({
       sf_case_id: c.Id,
@@ -157,21 +212,43 @@ export async function runSync(): Promise<SyncResult> {
     if (caseErr) throw caseErr;
     const caseIdBySf = new Map((cases ?? []).map((c) => [c.sf_case_id as string, c.id as string]));
 
-    // 5. Clean + store the customer-facing update for each changed case.
+    // 5. Clean + store the customer-facing update — but only where it could have changed.
+    let recleaned = 0;
+    let skipped = 0;
     for (const c of caseRows) {
       const caseId = caseIdBySf.get(c.Id);
       if (!caseId) continue;
       const email = latestEmail.get(c.Id);
-      const resolved = statusToChip(c.Status) === "resolved";
+      const chip = statusToChip(c.Status);
+      const resolved = chip === "resolved";
       const source =
         resolved && c.Resolution__c
           ? stripHtml(c.Resolution__c)
           : email
             ? stripHtml(email.TextBody || email.HtmlBody || "")
             : "";
+
+      // Skip-unchanged guard (IAI-396): identical source + chip → identical blurb, so don't pay
+      // for the model calls or rewrite the row.
+      const priorCase = priorCaseBySf.get(c.Id);
+      const priorUpd = priorCase ? priorUpdateByCaseId.get(priorCase.id as string) : undefined;
+      const prev = priorCase
+        ? {
+            chip: priorCase.status_chip as StatusChip,
+            rawBody: (priorUpd?.raw_body as string | null) ?? null,
+            cleanedUpdate: (priorUpd?.cleaned_update as string | null) ?? null,
+            safetyFlag: (priorUpd?.safety_flag as boolean | null) ?? null,
+          }
+        : undefined;
+      if (!needsReclean(prev, { source, chip })) {
+        skipped++;
+        continue;
+      }
+
+      recleaned++;
       try {
         const cleaned = await cleanUpdate(source, {
-          statusChip: statusToChip(c.Status),
+          statusChip: chip,
           subject: c.Subject,
           caseType: c.Type,
           emailDate: email?.MessageDate,
@@ -193,6 +270,7 @@ export async function runSync(): Promise<SyncResult> {
         console.error(`[relay] update clean failed for case ${c.Id}:`, err);
       }
     }
+    console.log(`[relay] sync: ${recleaned} update(s) re-cleaned, ${skipped} unchanged (skipped)`);
 
     if (runId) {
       await supabase

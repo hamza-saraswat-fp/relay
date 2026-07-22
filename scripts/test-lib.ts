@@ -4,7 +4,8 @@
  */
 import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
-import { syncHealth, type SyncRunRow } from "../lib/health";
+import { syncHealth, refreshGate, MANUAL_COOLDOWN_MS, type SyncRunRow } from "../lib/health";
+import { needsReclean } from "../lib/sync";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
@@ -205,6 +206,87 @@ console.log("containsBannedCta read-only-page guard (IAI-317):");
   );
   assert(containsBannedCta("let us know if you're still seeing this") === null, "'let us know if …' allowed");
   assert(containsBannedCta("we'll post an update here as soon as there's news") === null, "'update here' allowed");
+}
+
+console.log("refreshGate customer refresh (IAI-396):");
+{
+  const NOW = Date.parse("2026-07-22T18:00:00Z");
+  const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
+  const run = (o: Partial<SyncRunRow> = {}): SyncRunRow => ({
+    started_at: minsAgo(30), finished_at: minsAgo(26), status: "ok", cases_upserted: 5, error: null, ...o,
+  });
+
+  assert(refreshGate([], NOW).state === "allowed", "no runs → allowed");
+  assert(refreshGate([run()], NOW).state === "allowed", "last run 30m ago → allowed");
+  assert(
+    refreshGate([run({ started_at: minsAgo(3), finished_at: minsAgo(1) })], NOW).state === "cooldown",
+    "last run 3m ago → cooldown",
+  );
+  {
+    const d = refreshGate([run({ started_at: minsAgo(4), finished_at: minsAgo(2) })], NOW);
+    const expected = Math.ceil((MANUAL_COOLDOWN_MS - 4 * 60000) / 1000);
+    assert(d.retryAfterSeconds === expected, `cooldown reports retryAfterSeconds (${expected}s)`);
+  }
+  assert(
+    refreshGate([run({ started_at: minsAgo(2), finished_at: null, status: "running" })], NOW).state === "running",
+    "sync in flight → running",
+  );
+  assert(
+    refreshGate([run({ started_at: minsAgo(45), finished_at: null, status: "running" })], NOW).state === "allowed",
+    "stuck 'running' row (killed function) must not block refresh forever",
+  );
+  assert(
+    refreshGate(
+      [run({ started_at: minsAgo(90) }), run({ started_at: minsAgo(1), finished_at: null, status: "running" })],
+      NOW,
+    ).state === "running",
+    "picks the newest run regardless of array order",
+  );
+}
+
+console.log("needsReclean skip-unchanged guard (IAI-396):");
+{
+  const next = { source: "We're still investigating.", chip: "in_progress" as const };
+  const stored = {
+    chip: "in_progress" as const,
+    rawBody: next.source,
+    cleanedUpdate: "We're actively looking into this.",
+    safetyFlag: false,
+  };
+
+  assert(needsReclean(stored, next) === false, "identical source + chip → skip (no model calls)");
+  assert(needsReclean(undefined, next) === true, "no prior case row → re-clean");
+  assert(
+    needsReclean({ ...stored, cleanedUpdate: null }, next) === true,
+    "prior row with no stored blurb → re-clean",
+  );
+  assert(
+    needsReclean({ ...stored, rawBody: "A different email arrived." }, next) === true,
+    "source email changed → re-clean",
+  );
+  assert(
+    needsReclean({ ...stored, chip: "waiting_for_you" }, next) === true,
+    "chip changed → re-clean (blurb framing follows the chip)",
+  );
+  assert(
+    needsReclean({ ...stored, safetyFlag: true }, next) === true,
+    "previously flagged → retry (self-healing preserved)",
+  );
+  assert(
+    needsReclean({ ...stored, cleanedUpdate: SAFE_FALLBACK }, next) === true,
+    "fell back despite having source text → retry (self-healing preserved)",
+  );
+  assert(
+    needsReclean(
+      { ...stored, rawBody: null, cleanedUpdate: SAFE_FALLBACK },
+      { ...next, source: "" },
+    ) === false,
+    "no outbound email at all → fallback is permanent, don't rewrite every run",
+  );
+  assert(
+    needsReclean({ ...stored, rawBody: null }, { ...next, source: "" }) === false,
+    "no email before and none now → still skip",
+  );
 }
 
 if (failed > 0) {

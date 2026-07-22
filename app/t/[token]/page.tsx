@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { ReactElement } from "react";
 import { getAccountView } from "@/lib/data";
 import { type AccountView, type StatusChip, type Ticket } from "@/lib/types";
+import RefreshButton from "./RefreshButton";
 import styles from "./tracker.module.css";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +145,8 @@ export default async function TrackerPage({
             </div>
             <div className={styles.sumFoot}>
               Updated {fmtDate(account.lastUpdatedISO)} · refreshes automatically
+              {/* Live data only — in seed/offline mode there is nothing to refresh. */}
+              {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
             </div>
           </aside>
         </section>
