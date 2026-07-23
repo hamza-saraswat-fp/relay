@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { runSync } from "@/lib/sync";
 import { getServiceClient } from "@/lib/supabase";
+import { MANUAL_COOLDOWN_MS } from "@/lib/health";
 
 /**
  * Salesforce → Supabase sync endpoint (IAI-212).
@@ -8,8 +9,6 @@ import { getServiceClient } from "@/lib/supabase";
  *  - Manual refresh: POST with `x-relay-sync-key: ${RELAY_SYNC_KEY}` (rate-limited ≥10 min)
  */
 export const maxDuration = 300;
-
-const MANUAL_COOLDOWN_MS = 10 * 60 * 1000;
 
 function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
