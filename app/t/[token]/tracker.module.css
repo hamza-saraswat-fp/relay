@@ -166,31 +166,43 @@
   border-top: 1px solid rgba(139, 142, 214, 0.18);
 }
 
-/* customer Refresh control (IAI-396) — sits on the dark summary card, so it's light-on-navy */
+/* customer Refresh control (IAI-396) — sits in the "Open tickets" section header, on the light
+   page background. Deliberately reads as a real button: customers are told to use it when a
+   status looks stale, so it must be findable at a glance. */
 .refreshWrap {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-left: 8px;
+  align-self: center;
 }
 .refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font: inherit;
-  font-weight: 600;
-  color: #cdd6ff;
-  background: rgba(205, 214, 255, 0.1);
-  border: 1px solid rgba(139, 142, 214, 0.35);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: var(--cobalt);
+  border: 1px solid var(--cobalt);
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 9px 18px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 3, 77, 0.12);
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
 }
 .refreshBtn:hover:not(:disabled) {
-  background: rgba(205, 214, 255, 0.18);
-  border-color: rgba(139, 142, 214, 0.6);
+  filter: brightness(1.12);
+  box-shadow: 0 2px 6px rgba(0, 3, 77, 0.18);
 }
-.refreshBtn:disabled { opacity: 0.6; cursor: default; }
-.refreshMsg { color: #8890cf; }
+.refreshBtn:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+.refreshBtn:disabled { opacity: 0.65; cursor: default; box-shadow: none; }
+.refreshIcon { width: 15px; height: 15px; flex: none; }
+.refreshSpin { animation: refreshspin 1s linear infinite; }
+@keyframes refreshspin { to { transform: rotate(360deg); } }
+.refreshMsg { font-size: 12.5px; color: var(--ink-4); }
 
 /* section head */
 /* top "how to reply" notice — same guidance as the footer, surfaced above the tickets */
@@ -213,9 +225,12 @@
 .sec {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 54px 0 18px;
 }
+/* the heading must never be squeezed onto two lines by the Refresh button beside it */
+.sec h2 { flex-shrink: 0; }
 .sec h2 {
   font-family: var(--disp);
   font-size: 22px;
@@ -400,6 +415,9 @@
 
 /* phone */
 @media (max-width: 560px) {
+  /* full width forces the Refresh button onto its own row, so the heading stays on one line */
+  .refreshWrap { width: 100%; margin-top: 2px; }
+  .refreshBtn { justify-content: center; }
   .wrap { padding: 0 16px 84px; }
   .bar { padding: 16px 0 10px; }
   .logo { height: 20px; }
