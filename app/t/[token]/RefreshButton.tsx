@@ -18,7 +18,8 @@ const GIVE_UP_MS = 6 * 60_000;
 type Phase = "idle" | "starting" | "refreshing" | "done" | "fresh" | "busy" | "slow" | "error";
 
 const MESSAGE: Partial<Record<Phase, string>> = {
-  refreshing: "Refreshing — this takes a couple of minutes…",
+  // No time promise: syncs are typically ~15s now, so "a couple of minutes" read as misleading.
+  refreshing: "Working on it…",
   fresh: "Already up to date.",
   busy: "High refresh traffic right now — try again in a few minutes.",
   slow: "Taking longer than usual — check back shortly.",
