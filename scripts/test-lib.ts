@@ -4,7 +4,14 @@
  */
 import { parseCsv } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
-import { syncHealth, refreshGate, MANUAL_COOLDOWN_MS, type SyncRunRow } from "../lib/health";
+import {
+  syncHealth,
+  refreshGate,
+  scopedRefreshAllowed,
+  MANUAL_COOLDOWN_MS,
+  MAX_SCOPED_PER_HOUR,
+  type SyncRunRow,
+} from "../lib/health";
 import { needsReclean } from "../lib/sync";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
@@ -208,39 +215,101 @@ console.log("containsBannedCta read-only-page guard (IAI-317):");
   assert(containsBannedCta("we'll post an update here as soon as there's news") === null, "'update here' allowed");
 }
 
-console.log("refreshGate customer refresh (IAI-396):");
+console.log("refreshGate per-account refresh (IAI-396 / IAI-398):");
 {
   const NOW = Date.parse("2026-07-22T18:00:00Z");
   const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
+  const ME = "acct-unique";
+  const OTHER = "acct-overhead";
   const run = (o: Partial<SyncRunRow> = {}): SyncRunRow => ({
-    started_at: minsAgo(30), finished_at: minsAgo(26), status: "ok", cases_upserted: 5, error: null, ...o,
+    started_at: minsAgo(30), finished_at: minsAgo(26), status: "ok", cases_upserted: 5, error: null,
+    scope: "full", ...o,
   });
 
-  assert(refreshGate([], NOW).state === "allowed", "no runs → allowed");
-  assert(refreshGate([run()], NOW).state === "allowed", "last run 30m ago → allowed");
+  assert(refreshGate([], ME, NOW).state === "allowed", "no runs → allowed");
+  assert(refreshGate([run()], ME, NOW).state === "allowed", "full run 30m ago → allowed");
   assert(
-    refreshGate([run({ started_at: minsAgo(3), finished_at: minsAgo(1) })], NOW).state === "cooldown",
-    "last run 3m ago → cooldown",
+    refreshGate([run({ started_at: minsAgo(3), finished_at: minsAgo(1) })], ME, NOW).state === "cooldown",
+    "full cron run 3m ago covers this account → cooldown ('already up to date' is truthful)",
+  );
+  assert(
+    refreshGate([run({ started_at: minsAgo(3), finished_at: minsAgo(1), scope: ME })], ME, NOW).state === "cooldown",
+    "own scoped refresh 3m ago → cooldown",
+  );
+  // THE DECOUPLING ASSERTION — the entire point of IAI-398:
+  assert(
+    refreshGate([run({ started_at: minsAgo(1), finished_at: null, status: "running", scope: OTHER })], ME, NOW)
+      .state === "allowed",
+    "ANOTHER account's refresh 1m ago (even mid-run) → this account still allowed",
+  );
+  assert(
+    refreshGate([run({ started_at: minsAgo(3), scope: OTHER }), run({ started_at: minsAgo(3), scope: ME })], ME, NOW)
+      .state === "cooldown",
+    "own scoped run applies even alongside another account's runs",
   );
   {
-    const d = refreshGate([run({ started_at: minsAgo(4), finished_at: minsAgo(2) })], NOW);
+    const d = refreshGate([run({ started_at: minsAgo(4), finished_at: minsAgo(2), scope: ME })], ME, NOW);
     const expected = Math.ceil((MANUAL_COOLDOWN_MS - 4 * 60000) / 1000);
     assert(d.retryAfterSeconds === expected, `cooldown reports retryAfterSeconds (${expected}s)`);
   }
   assert(
-    refreshGate([run({ started_at: minsAgo(2), finished_at: null, status: "running" })], NOW).state === "running",
-    "sync in flight → running",
+    refreshGate([run({ started_at: minsAgo(2), finished_at: null, status: "running", scope: ME })], ME, NOW)
+      .state === "running",
+    "own sync in flight → running",
   );
   assert(
-    refreshGate([run({ started_at: minsAgo(45), finished_at: null, status: "running" })], NOW).state === "allowed",
+    refreshGate([run({ started_at: minsAgo(45), finished_at: null, status: "running", scope: ME })], ME, NOW)
+      .state === "allowed",
     "stuck 'running' row (killed function) must not block refresh forever",
   );
   assert(
-    refreshGate(
-      [run({ started_at: minsAgo(90) }), run({ started_at: minsAgo(1), finished_at: null, status: "running" })],
+    refreshGate([run({ scope: undefined, started_at: minsAgo(3) })], ME, NOW).state === "cooldown",
+    "pre-migration row (no scope) counts as full",
+  );
+}
+
+console.log("scopedRefreshAllowed global safety valve (IAI-398):");
+{
+  const NOW = Date.parse("2026-07-22T18:00:00Z");
+  const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
+  const scopedRun = (m: number, i: number): SyncRunRow => ({
+    started_at: minsAgo(m), finished_at: minsAgo(m), status: "ok", cases_upserted: 1, error: null,
+    scope: `acct-${i}`,
+  });
+
+  assert(scopedRefreshAllowed([], NOW) === true, "no runs → allowed");
+  const under = Array.from({ length: MAX_SCOPED_PER_HOUR - 1 }, (_, i) => scopedRun(30, i));
+  assert(scopedRefreshAllowed(under, NOW) === true, `${MAX_SCOPED_PER_HOUR - 1} scoped runs in the hour → allowed`);
+  const at = Array.from({ length: MAX_SCOPED_PER_HOUR }, (_, i) => scopedRun(30, i));
+  assert(scopedRefreshAllowed(at, NOW) === false, `${MAX_SCOPED_PER_HOUR} scoped runs in the hour → refused`);
+  const old = Array.from({ length: MAX_SCOPED_PER_HOUR }, (_, i) => scopedRun(90, i));
+  assert(scopedRefreshAllowed(old, NOW) === true, "old scoped runs age out of the window");
+  const fulls: SyncRunRow[] = Array.from({ length: MAX_SCOPED_PER_HOUR }, () => ({
+    started_at: minsAgo(10), finished_at: minsAgo(8), status: "ok", cases_upserted: 21, error: null, scope: "full",
+  }));
+  assert(scopedRefreshAllowed(fulls, NOW) === true, "full cron runs don't count toward the valve");
+}
+
+console.log("syncHealth ignores scoped runs (IAI-398):");
+{
+  const NOW = Date.parse("2026-07-22T18:00:00Z");
+  const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
+  assert(
+    syncHealth(
+      [
+        { started_at: minsAgo(2), finished_at: minsAgo(1), status: "ok", cases_upserted: 1, error: null, scope: "acct-x" },
+        { started_at: minsAgo(6 * 60), finished_at: minsAgo(6 * 60 - 2), status: "ok", cases_upserted: 21, error: null, scope: "full" },
+      ],
       NOW,
-    ).state === "running",
-    "picks the newest run regardless of array order",
+    ).state === "stale",
+    "fresh scoped refresh must NOT mask a stale cron (only full runs count)",
+  );
+  assert(
+    syncHealth(
+      [{ started_at: minsAgo(2), finished_at: minsAgo(1), status: "ok", cases_upserted: 1, error: null, scope: "acct-x" }],
+      NOW,
+    ).state === "never_run",
+    "only scoped runs on record → cron has never run",
   );
 }
 

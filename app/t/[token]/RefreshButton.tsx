@@ -15,11 +15,12 @@ import styles from "./tracker.module.css";
 const POLL_MS = 12_000;
 const GIVE_UP_MS = 6 * 60_000;
 
-type Phase = "idle" | "starting" | "refreshing" | "done" | "fresh" | "slow" | "error";
+type Phase = "idle" | "starting" | "refreshing" | "done" | "fresh" | "busy" | "slow" | "error";
 
 const MESSAGE: Partial<Record<Phase, string>> = {
   refreshing: "Refreshing — this takes a couple of minutes…",
   fresh: "Already up to date.",
+  busy: "High refresh traffic right now — try again in a few minutes.",
   slow: "Taking longer than usual — check back shortly.",
   error: "Couldn't refresh — try again shortly.",
 };
@@ -91,7 +92,8 @@ export default function RefreshButton({ token }: { token: string }) {
         poll(state === "refreshing" ? 0 : clickedAtMs);
         return;
       }
-      setPhase("fresh"); // 'fresh' — a sync ran recently, so the page is already current.
+      // 'fresh' — synced recently, already current. 'busy' — global safety valve engaged.
+      setPhase(state === "busy" ? "busy" : "fresh");
     } catch {
       setPhase("error");
     }
