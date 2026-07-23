@@ -386,6 +386,9 @@
   .rule { display: none; }
   .refreshWrap { width: 100%; margin-top: 4px; }
   .refreshBtn { justify-content: center; }
+  /* no right edge to protect on a stacked layout, so the message goes back under the button
+     and the button doesn't get shoved down the page when one appears */
+  .refreshMsg { order: 1; width: 100%; }
   .wrap { padding: 0 16px 84px; }
   .bar { padding: 16px 0 10px; }
   .logo { height: 20px; }
