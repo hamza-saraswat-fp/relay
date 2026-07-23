@@ -104,6 +104,13 @@ export default function RefreshButton({ token }: { token: string }) {
 
   return (
     <span className={styles.refreshWrap}>
+      {/* Message sits BEFORE the button so it grows leftward: the button stays pinned to the
+          right edge of the section header instead of being shoved off it. */}
+      {MESSAGE[phase] && (
+        <span className={styles.refreshMsg} role="status">
+          {MESSAGE[phase]}
+        </span>
+      )}
       <button
         type="button"
         className={styles.refreshBtn}
@@ -126,11 +133,6 @@ export default function RefreshButton({ token }: { token: string }) {
         </svg>
         {busy ? "Refreshing…" : "Refresh"}
       </button>
-      {MESSAGE[phase] && (
-        <span className={styles.refreshMsg} role="status">
-          {MESSAGE[phase]}
-        </span>
-      )}
     </span>
   );
 }
