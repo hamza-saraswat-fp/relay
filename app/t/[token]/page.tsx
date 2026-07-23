@@ -143,53 +143,20 @@ export default async function TrackerPage({
           </aside>
         </section>
 
-        <section className={styles.how} aria-label="How to reply to a ticket">
-          <div className={styles.howHead}>
-            <IconMailNote />
-            How to reply to a ticket
-          </div>
-          <ol className={styles.howSteps}>
-            <li>
-              <span className={styles.howNum}>1</span>
-              <div>
-                <b>Find the email</b>
-                <p>
-                  Every ticket title below is the subject line of an email from our support
-                  team. Search your inbox for it.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span className={styles.howNum}>2</span>
-              <div>
-                <b>Reply in that thread</b>
-                <p>
-                  Your reply goes straight to the person working on it. No need to start a new
-                  email.
-                </p>
-              </div>
-            </li>
-            <li>
-              <span className={styles.howNum}>3</span>
-              <div>
-                <b>Track it here</b>
-                <p>
-                  Statuses below move as we work. Use Refresh any time to pull the latest.
-                </p>
-              </div>
-            </li>
-          </ol>
-        </section>
+        <div className={styles.notice}>
+          <IconMailNote />
+          <span>
+            <b>Need to reply to a ticket?</b> Its title is the subject line of your email thread
+            with our support team, so search your inbox for it and reply there.
+          </span>
+        </div>
 
         <div className={styles.sec}>
           <h2>Open tickets</h2>
           <span className={styles.secC}>{open.length} active</span>
           <span className={styles.rule} />
-          <div className={styles.secEnd}>
-            <span className={styles.updated}>Updated {fmtDate(account.lastUpdatedISO)}</span>
-            {/* Live data only — in seed/offline mode there is nothing to refresh. */}
-            {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
-          </div>
+          {/* Live data only — in seed/offline mode there is nothing to refresh. */}
+          {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
         </div>
 
         {open.length === 0 ? (

@@ -25,7 +25,7 @@ const MODEL = "anthropic/claude-sonnet-5";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const SAFE_FALLBACK =
-  "Our team posted an update on this ticket — check your email thread for details.";
+  "Our team posted an update on this ticket. Check your email thread for details.";
 
 export interface CleanContext {
   statusChip?: StatusChip;
@@ -70,7 +70,9 @@ const STATUS_DESC: Record<StatusChip, string> = {
 
 const SYSTEM = `You write the customer-facing "latest update" shown on a PUBLIC support ticket status page for FieldPulse (field-service management software). You rewrite a support team member's raw outbound email into a short, clear status update.
 
-VOICE: Write as a FieldPulse implementation specialist — warm, plain, professional. Use "we" / "our team". 1–3 sentences, written directly to the customer.
+VOICE: Write as a FieldPulse implementation specialist: warm, plain, professional. Use "we" / "our team". 1-3 sentences, written directly to the customer.
+
+PUNCTUATION: Never use an em-dash (—) or an en-dash (–) anywhere in your output. They read as machine-written and are off-voice for FieldPulse. Use a comma, a colon, parentheses, or split into two sentences instead.
 
 PAGE IS READ-ONLY: This update appears on a status page the customer CANNOT reply on. If the customer needs to respond or send something, direct them to their EMAIL THREAD — say "reply to your email thread". NEVER say "reply here", "respond here", "let us know here", or anything implying they can act on the page itself.
 
@@ -80,8 +82,8 @@ VOCABULARY (strict):
 - Say "ticket", not "case". Never name individual people or roles.
 
 STATUS CONSISTENCY: You are given the ticket's CURRENT status. Your update must not contradict it:
-- "Our team is actively working on it": frame us as actively working. If the email asks the customer for information, present it as something that helps us move faster — never as the ticket being stalled on them. e.g. "We're actively investigating this — an example invoice number will help us pin it down faster."
-- "In our support queue" or "Waiting on the customer": if the email says the ticket was closed or paused, do NOT say "closed" — describe it as paused and easy to resume. e.g. "We haven't been able to connect for a troubleshooting session yet — reply anytime and we'll pick right back up."
+- "Our team is actively working on it": frame us as actively working. If the email asks the customer for information, present it as something that helps us move faster, never as the ticket being stalled on them. e.g. "We're actively investigating this, and an example invoice number will help us pin it down faster."
+- "In our support queue" or "Waiting on the customer": if the email says the ticket was closed or paused, do NOT say "closed". Describe it as paused and easy to resume. e.g. "We haven't been able to connect for a troubleshooting session yet. Reply anytime and we'll pick right back up."
 - "Waiting on the customer to reply": lead with what we need from them to move forward.
 - "Resolved": briefly summarize the resolution.
 
@@ -89,7 +91,7 @@ TIMING: You may be told when the email was sent and today's date. If the email i
 
 FIDELITY: Never invent information that isn't in the email. The CONTEXT fields are for consistency and tone only — never quote them back to the customer.
 
-SAFETY (the page is public) — sanitize, don't suppress:
+SAFETY (the page is public), sanitize rather than suppress:
 - Your OUTPUT must never contain: any person's name (staff or customer), email addresses, phone numbers, physical addresses, dollar amounts, credentials/API keys/passwords, or another customer's/company's identifying details. Agent signatures and quoted reply threads are noise — ignore them entirely.
 - When the email contains sensitive details, SUMMARIZE AROUND them: describe what happened or what we need without the specifics. e.g. an email about an $18.40 payment mismatch becomes "We found a small mismatch between the payment and invoice amounts and asked you to confirm one detail." A "can we create a test record to reproduce what Marvin is seeing?" email becomes "We've asked to create a test record on your account so we can reproduce the issue."
 - Set "sensitive": true ONLY when the email cannot be faithfully summarized without exposing sensitive content — internal-only staff commentary, credential delivery, or an email whose entire substance IS the sensitive information. A benign update that merely CONTAINS a signature, name, or amount is NOT sensitive — summarize around it.
@@ -149,6 +151,22 @@ export function containsBannedCta(text: string): string | null {
     if (re.test(text)) return label;
   }
   return null;
+}
+
+/**
+ * Style backstop: the prompt bans em/en-dashes (they read as machine-written and are off-voice
+ * for FieldPulse), and this rewrites any the model still emits. Unlike the safety gates this is
+ * cosmetic, so it repairs the text rather than failing closed. A comma is the substitution that
+ * reads naturally across the clause-dash-clause shape these blurbs actually produce. Spaced
+ * en-dashes only, so a numeric range ("3-5 days" written as 3–5) is left intact.
+ */
+export function normalizeDashes(text: string): string {
+  return text
+    .replace(/\s*—\s*/g, ", ")
+    .replace(/\s+–\s+/g, ", ")
+    .replace(/,\s*([,.!?;:])/g, "$1")
+    .replace(/,\s*$/, "")
+    .trim();
 }
 
 /**
@@ -277,7 +295,8 @@ export async function cleanUpdate(rawEmail: string, ctx?: CleanContext): Promise
   if (parsed.sensitive) {
     return { cleaned: SAFE_FALLBACK, safetyFlag: true, model: MODEL };
   }
-  const cleaned = parsed.cleaned.trim();
+  // Style pass runs before the gates so they judge the text that actually gets published.
+  const cleaned = normalizeDashes(parsed.cleaned.trim());
   // Code backstop: even if the model said it's safe, a sensitive pattern in the OUTPUT fails closed.
   const hit = containsSensitive(cleaned);
   if (hit) {
