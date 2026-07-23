@@ -71,14 +71,14 @@ export function fallbackFor(chip: StatusChip, hasHiddenEmail: boolean): string {
   switch (chip) {
     case "in_progress":
       return (
-        "Our team is actively working on this ticket — we'll post an update here as soon as there's news." +
+        "Our team is actively working on this ticket. We'll post an update here as soon as there's news." +
         (hasHiddenEmail ? HIDDEN_EMAIL_SUFFIX : "")
       );
     case "waiting_for_you":
-      return "We're waiting on a reply from you to keep this moving — check your email thread for our latest message.";
+      return "We're waiting on a reply from you to keep this moving. Check your email thread for our latest message.";
     case "waiting_for_support":
       return (
-        "This ticket is in our support queue — we'll post an update here once our team picks it up." +
+        "This ticket is in our support queue. We'll post an update here once our team picks it up." +
         (hasHiddenEmail ? HIDDEN_EMAIL_SUFFIX : "")
       );
     case "resolved":

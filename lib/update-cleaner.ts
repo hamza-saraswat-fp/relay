@@ -153,18 +153,45 @@ export function containsBannedCta(text: string): string | null {
   return null;
 }
 
+/** Words that continue the current sentence, so a dash before them wants a comma, not a stop. */
+const DASH_JOINERS =
+  /^(and|but|so|or|yet|nor|which|who|whom|whose|that|because|while|although|though|since|unless)\b/i;
+
+/** Spaced en-dash or any em-dash. Unspaced en-dashes are ranges ("3–5 days") and stay. */
+const DASH = /\s*—\s*|\s+–\s+/;
+
 /**
  * Style backstop: the prompt bans em/en-dashes (they read as machine-written and are off-voice
  * for FieldPulse), and this rewrites any the model still emits. Unlike the safety gates this is
- * cosmetic, so it repairs the text rather than failing closed. A comma is the substitution that
- * reads naturally across the clause-dash-clause shape these blurbs actually produce. Spaced
- * en-dashes only, so a numeric range ("3-5 days" written as 3–5) is left intact.
+ * cosmetic, so it repairs the text rather than failing closed.
+ *
+ * These blurbs put a dash between two independent clauses far more often than around a
+ * parenthetical, so a full stop is the substitution that actually reads: a comma turns
+ * "posted an update — check your email thread" into a splice. Two exceptions:
+ *   - the clause after the dash opens with a joiner ("…, which is small"), where a stop is wrong;
+ *   - the text holds 2+ dashes, which usually means they bracket a parenthetical, and splitting
+ *     that into sentences would strand a fragment.
  */
 export function normalizeDashes(text: string): string {
-  return text
-    .replace(/\s*—\s*/g, ", ")
-    .replace(/\s+–\s+/g, ", ")
-    .replace(/,\s*([,.!?;:])/g, "$1")
+  const parenthetical = (text.match(/—|\s–\s/g) ?? []).length >= 2;
+  let out = text;
+  for (let guard = 0; guard < 20; guard++) {
+    const m = out.match(DASH);
+    if (!m || m.index === undefined) break;
+    const before = out.slice(0, m.index);
+    const after = out.slice(m.index + m[0].length);
+    if (!after) {
+      out = before; // dangling dash at the end: nothing to join, so drop it
+      break;
+    }
+    out =
+      parenthetical || DASH_JOINERS.test(after)
+        ? `${before}, ${after}`
+        : `${before}. ${after.charAt(0).toUpperCase()}${after.slice(1)}`;
+  }
+  return out
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/([.,;:])\s*([.,!?;:])/g, "$2")
     .replace(/,\s*$/, "")
     .trim();
 }
