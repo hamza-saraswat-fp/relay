@@ -219,18 +219,28 @@ console.log("containsBannedCta read-only-page guard (IAI-317):");
 console.log("normalizeDashes style backstop:");
 {
   assert(
-    normalizeDashes("We're investigating this — an example invoice will help.") ===
-      "We're investigating this, an example invoice will help.",
-    "spaced em-dash becomes a comma",
+    normalizeDashes("Our team posted an update — check your email thread.") ===
+      "Our team posted an update. Check your email thread.",
+    "clause-dash-clause becomes a full stop, not a splice",
   );
   assert(
     normalizeDashes("A fix is being tested—we expect an update this week.") ===
-      "A fix is being tested, we expect an update this week.",
-    "unspaced em-dash becomes a comma",
+      "A fix is being tested. We expect an update this week.",
+    "unspaced em-dash splits too",
   );
   assert(
-    normalizeDashes("We haven't connected yet – reply anytime.") === "We haven't connected yet, reply anytime.",
-    "spaced en-dash becomes a comma",
+    normalizeDashes("We haven't connected yet – reply anytime.") === "We haven't connected yet. Reply anytime.",
+    "spaced en-dash splits too",
+  );
+  assert(
+    normalizeDashes("We've paused this — so reply whenever you're ready.") ===
+      "We've paused this, so reply whenever you're ready.",
+    "a joiner after the dash takes a comma instead",
+  );
+  assert(
+    normalizeDashes("The fix — which is small — is ready to apply.") ===
+      "The fix, which is small, is ready to apply.",
+    "paired dashes read as a parenthetical and take commas",
   );
   assert(
     normalizeDashes("This usually takes 3–5 business days.") === "This usually takes 3–5 business days.",
@@ -238,11 +248,11 @@ console.log("normalizeDashes style backstop:");
   );
   assert(
     normalizeDashes("We'll follow up —") === "We'll follow up",
-    "trailing dash leaves no dangling comma",
+    "dangling dash is dropped, leaving no stray punctuation",
   );
   assert(
     normalizeDashes("We're on it — . ") === "We're on it.",
-    "comma is not left stacked against following punctuation",
+    "substituted stop is not left stacked against following punctuation",
   );
   assert(
     normalizeDashes("Our team is actively working on this ticket.") ===
