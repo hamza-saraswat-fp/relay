@@ -20,9 +20,12 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = getServiceClient();
+  // Full runs only (IAI-398): health watches the CRON. Filtering here (not just in the
+  // classifier) also keeps customer scoped refreshes from crowding full runs out of the window.
   const { data, error } = await supabase
     .from("sync_runs")
-    .select("started_at, finished_at, status, cases_upserted, error")
+    .select("started_at, finished_at, status, cases_upserted, error, scope")
+    .eq("scope", "full")
     .order("started_at", { ascending: false })
     .limit(20);
   if (error) {
