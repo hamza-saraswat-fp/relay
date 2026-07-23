@@ -132,7 +132,7 @@
 .sumYou .sumN { color: var(--aqua); }
 
 /* customer Refresh control (IAI-396) — right-aligned at the end of the "Open tickets" section
-   header, next to the "Updated <date>" stamp it acts on. Deliberately reads as a real button:
+   header, right-aligned at the far edge of the page. Deliberately reads as a real button:
    customers are told to use it when a status looks stale, so it must be findable at a glance. */
 .refreshWrap {
   display: inline-flex;
@@ -169,50 +169,23 @@
 @keyframes refreshspin { to { transform: rotate(360deg); } }
 .refreshMsg { font-size: 12.5px; color: var(--ink-4); }
 
-/* "how to reply" strip — the one thing a customer may need to *do* from this page, broken into
-   three scannable steps rather than a paragraph they have to read to find the instruction. */
-.how {
-  margin-top: 26px;
-  padding: 15px 18px 18px;
+/* top "how to reply" notice — one line telling the customer how to find the email thread a
+   given ticket belongs to, which is the only action this read-only page can point them at */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 13px 16px;
   background: var(--line-2);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
 }
-.howHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.noticeIcon { width: 15px; height: 15px; flex: none; color: var(--cobalt); }
-.howSteps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px 22px;
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.howSteps li { display: flex; align-items: flex-start; gap: 10px; }
-.howNum {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 50%;
-  background: var(--cobalt);
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-}
-.howSteps b { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
-.howSteps p { margin: 3px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-3); }
+.noticeIcon { width: 16px; height: 16px; flex: none; color: var(--cobalt); margin-top: 2px; }
+.notice b { color: var(--ink); font-weight: 600; }
 
 /* section head */
 .sec {
@@ -233,15 +206,6 @@
 }
 .secC { font-size: 13px; color: var(--ink-4); }
 .rule { flex: 1; height: 1px; background: var(--line); }
-/* freshness sits beside the control that changes it, not in the summary card, so the two
-   are grouped and always wrap as a unit */
-.secEnd {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  align-self: center;
-}
-.updated { font-size: 12.5px; color: var(--ink-4); white-space: nowrap; }
 
 /* ticket card: status + subject + dates on the left, the update on the right */
 .tk {
@@ -413,14 +377,15 @@
   .hero { grid-template-columns: 1fr; align-items: stretch; gap: 22px; }
   .tk { grid-template-columns: 1fr; row-gap: 16px; }
   .meta { margin-top: 6px; }
-  .howSteps { grid-template-columns: 1fr; gap: 13px; }
 }
 
 /* phone */
 @media (max-width: 560px) {
-  /* stamp + button take their own full-width row, so the heading stays on one line */
+  /* full width forces the Refresh button onto its own row, so the heading stays on one line;
+     the rule would otherwise be left as a stub beside the count */
   .rule { display: none; }
-  .secEnd { width: 100%; justify-content: space-between; margin-top: 4px; }
+  .refreshWrap { width: 100%; margin-top: 4px; }
+  .refreshBtn { justify-content: center; }
   .wrap { padding: 0 16px 84px; }
   .bar { padding: 16px 0 10px; }
   .logo { height: 20px; }
@@ -434,7 +399,6 @@
   .sumStat { padding: 0 8px; }
   .sumN { font-size: 25px; }
   .sumL { font-size: 10px; }
-  .how { padding: 14px 15px 16px; }
   .sec { margin: 40px 0 14px; }
   .sec h2 { font-size: 20px; }
   .tk { padding: 18px; }

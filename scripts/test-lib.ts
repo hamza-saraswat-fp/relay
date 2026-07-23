@@ -17,6 +17,7 @@ import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
   containsBannedCta,
+  normalizeDashes,
   latestMessageOnly,
   SAFE_FALLBACK,
 } from "../lib/update-cleaner";
@@ -213,6 +214,41 @@ console.log("containsBannedCta read-only-page guard (IAI-317):");
   );
   assert(containsBannedCta("let us know if you're still seeing this") === null, "'let us know if …' allowed");
   assert(containsBannedCta("we'll post an update here as soon as there's news") === null, "'update here' allowed");
+}
+
+console.log("normalizeDashes style backstop:");
+{
+  assert(
+    normalizeDashes("We're investigating this — an example invoice will help.") ===
+      "We're investigating this, an example invoice will help.",
+    "spaced em-dash becomes a comma",
+  );
+  assert(
+    normalizeDashes("A fix is being tested—we expect an update this week.") ===
+      "A fix is being tested, we expect an update this week.",
+    "unspaced em-dash becomes a comma",
+  );
+  assert(
+    normalizeDashes("We haven't connected yet – reply anytime.") === "We haven't connected yet, reply anytime.",
+    "spaced en-dash becomes a comma",
+  );
+  assert(
+    normalizeDashes("This usually takes 3–5 business days.") === "This usually takes 3–5 business days.",
+    "numeric range keeps its en-dash",
+  );
+  assert(
+    normalizeDashes("We'll follow up —") === "We'll follow up",
+    "trailing dash leaves no dangling comma",
+  );
+  assert(
+    normalizeDashes("We're on it — . ") === "We're on it.",
+    "comma is not left stacked against following punctuation",
+  );
+  assert(
+    normalizeDashes("Our team is actively working on this ticket.") ===
+      "Our team is actively working on this ticket.",
+    "clean text passes through untouched",
+  );
 }
 
 console.log("refreshGate per-account refresh (IAI-396 / IAI-398):");
