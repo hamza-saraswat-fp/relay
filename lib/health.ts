@@ -14,6 +14,14 @@ export interface SyncRunRow {
   status: string; // 'running' | 'ok' | 'error'
   cases_upserted: number | null;
   error: string | null;
+  /** 'full' (cron/internal) or the account id a customer refresh covered (IAI-398).
+   *  Optional: rows predating the 0003 migration read as 'full'. */
+  scope?: string;
+}
+
+/** Rows from before the scope column default to 'full' — every historical run was a full sync. */
+function scopeOf(row: SyncRunRow): string {
+  return row.scope ?? "full";
 }
 
 export type SyncState = "ok" | "stale" | "stuck" | "error" | "never_run";
@@ -42,11 +50,14 @@ const STALE_MINUTES = 5 * 60;
 export const MANUAL_COOLDOWN_MS = 10 * 60 * 1000;
 
 export function syncHealth(rows: SyncRunRow[], nowMs: number = Date.now()): SyncHealth {
-  if (!rows.length) {
+  // Health watches the CRON specifically, so only full runs count — a customer's scoped
+  // refresh succeeding must never mask a dead cron (IAI-398).
+  const fullRows = rows.filter((r) => scopeOf(r) === "full");
+  if (!fullRows.length) {
     return { state: "never_run", healthy: false, ageMinutes: null, lastRun: null };
   }
 
-  const latest = [...rows].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
+  const latest = [...fullRows].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
   const ageMinutes = Math.round((nowMs - new Date(latest.started_at).getTime()) / 60000);
   const lastRun = {
     startedAt: latest.started_at,
@@ -80,19 +91,28 @@ export interface RefreshDecision {
 }
 
 /**
- * Should a manual refresh actually kick off a sync? (IAI-396) Pure, like `syncHealth`.
+ * Should this account's manual refresh actually kick off a sync? (IAI-396 / IAI-398)
+ * Pure, like `syncHealth`.
  *
- * A sync refreshes every account, so the gate is deliberately GLOBAL: if anyone's sync ran
- * recently, everyone's data is already fresh. Neither non-'allowed' state is an error — the
- * customer is told their data is current / already updating.
+ * PER-ACCOUNT: only runs that COVERED this account count — its own scoped refreshes, plus any
+ * full run (the cron syncs everyone, so a recent full run genuinely means this account is
+ * fresh). Another account's scoped refresh is irrelevant: unrelated pages must never consume
+ * each other's cooldown.
  *
- * A 'running' row older than STUCK_MINUTES is a killed function, not a live sync, so it must not
- * block forever; it falls through (and is past the cooldown window by definition).
+ * Neither non-'allowed' state is an error — the customer is told their data is current /
+ * already updating. A 'running' row older than STUCK_MINUTES is a killed function, not a live
+ * sync, so it must not block forever; it falls through (and is past the cooldown window by
+ * definition).
  */
-export function refreshGate(rows: SyncRunRow[], nowMs: number = Date.now()): RefreshDecision {
-  if (!rows.length) return { state: "allowed" };
+export function refreshGate(
+  rows: SyncRunRow[],
+  accountId: string,
+  nowMs: number = Date.now(),
+): RefreshDecision {
+  const covering = rows.filter((r) => scopeOf(r) === "full" || scopeOf(r) === accountId);
+  if (!covering.length) return { state: "allowed" };
 
-  const latest = [...rows].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
+  const latest = [...covering].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
   const ageMs = nowMs - new Date(latest.started_at).getTime();
 
   if (latest.status === "running" && ageMs <= STUCK_MINUTES * 60000) {
@@ -102,4 +122,20 @@ export function refreshGate(rows: SyncRunRow[], nowMs: number = Date.now()): Ref
     return { state: "cooldown", retryAfterSeconds: Math.ceil((MANUAL_COOLDOWN_MS - ageMs) / 1000) };
   }
   return { state: "allowed" };
+}
+
+/** Org-wide ceiling on customer-triggered scoped syncs per rolling hour (IAI-398). Generous vs
+ *  realistic usage, but bounds worst-case Bulk API load no matter how many accounts exist. */
+export const MAX_SCOPED_PER_HOUR = 60;
+
+/**
+ * Global safety valve: may ANY scoped refresh start right now? Pure. Counts scoped (non-'full')
+ * runs started in the last hour across all accounts; full cron runs don't count against it.
+ */
+export function scopedRefreshAllowed(rows: SyncRunRow[], nowMs: number = Date.now()): boolean {
+  const hourAgo = nowMs - 60 * 60_000;
+  const recentScoped = rows.filter(
+    (r) => scopeOf(r) !== "full" && new Date(r.started_at).getTime() >= hourAgo,
+  ).length;
+  return recentScoped < MAX_SCOPED_PER_HOUR;
 }

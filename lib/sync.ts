@@ -108,7 +108,13 @@ function stripHtml(s: string): string {
     .trim();
 }
 
-export async function runSync(): Promise<SyncResult> {
+/** Optional per-account scoping (IAI-398): a customer Refresh syncs ONLY their account. */
+export interface SyncScope {
+  /** Supabase accounts.id — recorded as sync_runs.scope. */
+  accountId: string;
+}
+
+export async function runSync(scope?: SyncScope): Promise<SyncResult> {
   const supabase = getServiceClient();
 
   // Strict event-only: the sync operates ONLY on accounts already minted via the case-created
@@ -121,14 +127,19 @@ export async function runSync(): Promise<SyncResult> {
     await notifySyncFailure({ error: knownErr.message });
     return { status: "error", casesUpserted: 0, accountsUpserted: 0, error: knownErr.message };
   }
-  const acctIdBySf = new Map((knownAccts ?? []).map((a) => [a.sf_account_id as string, a.id as string]));
+  // Scoped run (customer Refresh): narrow to that one already-tracked account. An unknown id
+  // just yields an empty set → clean no-op "ok" run below.
+  const scopedAccts = scope
+    ? (knownAccts ?? []).filter((a) => a.id === scope.accountId)
+    : (knownAccts ?? []);
+  const acctIdBySf = new Map(scopedAccts.map((a) => [a.sf_account_id as string, a.id as string]));
   const knownSf = [...acctIdBySf.keys()].filter(isSalesforceId);
   const skipped = acctIdBySf.size - knownSf.length;
   if (skipped) console.warn(`[relay] sync: skipping ${skipped} account(s) with malformed sf_account_id`);
 
   const { data: run } = await supabase
     .from("sync_runs")
-    .insert({ status: "running" })
+    .insert({ status: "running", scope: scope?.accountId ?? "full" })
     .select("id")
     .single();
   const runId = run?.id as string | undefined;
