@@ -114,9 +114,6 @@ export default async function TrackerPage({
             <span className={styles.barDivider} aria-hidden />
             <span className={styles.barLabel}>Ticket Tracker</span>
           </div>
-          <span className={styles.synced}>
-            <span className={styles.pulse}><i /></span>Synced live
-          </span>
         </header>
 
         <section className={styles.hero}>
@@ -143,27 +140,56 @@ export default async function TrackerPage({
                 <span className={styles.sumL}>Resolved<br />last 30 days</span>
               </div>
             </div>
-            <div className={styles.sumFoot}>
-              Updated {fmtDate(account.lastUpdatedISO)} · refreshes automatically
-            </div>
           </aside>
         </section>
 
-        <div className={styles.notice}>
-          <IconMailNote />
-          <span>
-            <b>Need to reply to a ticket?</b> Just reply to the email thread you already have with
-            our support team — each ticket&apos;s title is the subject line of that email, so you can
-            search your inbox to find it.
-          </span>
-        </div>
+        <section className={styles.how} aria-label="How to reply to a ticket">
+          <div className={styles.howHead}>
+            <IconMailNote />
+            How to reply to a ticket
+          </div>
+          <ol className={styles.howSteps}>
+            <li>
+              <span className={styles.howNum}>1</span>
+              <div>
+                <b>Find the email</b>
+                <p>
+                  Every ticket title below is the subject line of an email from our support
+                  team. Search your inbox for it.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span className={styles.howNum}>2</span>
+              <div>
+                <b>Reply in that thread</b>
+                <p>
+                  Your reply goes straight to the person working on it. No need to start a new
+                  email.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span className={styles.howNum}>3</span>
+              <div>
+                <b>Track it here</b>
+                <p>
+                  Statuses below move as we work. Use Refresh any time to pull the latest.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </section>
 
         <div className={styles.sec}>
           <h2>Open tickets</h2>
           <span className={styles.secC}>{open.length} active</span>
-          {/* Live data only — in seed/offline mode there is nothing to refresh. */}
-          {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
           <span className={styles.rule} />
+          <div className={styles.secEnd}>
+            <span className={styles.updated}>Updated {fmtDate(account.lastUpdatedISO)}</span>
+            {/* Live data only — in seed/offline mode there is nothing to refresh. */}
+            {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
+          </div>
         </div>
 
         {open.length === 0 ? (
@@ -194,13 +220,12 @@ export default async function TrackerPage({
         )}
 
         <footer className={styles.footer}>
-          <b>Need to reply to a ticket?</b> Just reply to the email thread you already have
-          with our support team — each ticket&apos;s title is the subject line of that email, so you
-          can search your inbox to find it. Every ticket above links back to that same conversation.
-          General support: <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a>
+          <b>Need something that isn&apos;t listed here?</b> Email{" "}
+          <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a> and our support team
+          will pick it up from there.
           <div className={styles.fine}>
-            This page is read-only and updates automatically from FieldPulse&apos;s support
-            system. The link is private to your account.
+            This page is read-only and reflects your tickets in FieldPulse&apos;s support system.
+            The link is private to your account.
           </div>
         </footer>
       </div>

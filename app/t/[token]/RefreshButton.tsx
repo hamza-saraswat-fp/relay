@@ -21,9 +21,9 @@ const MESSAGE: Partial<Record<Phase, string>> = {
   // No time promise: syncs are typically ~15s now, so "a couple of minutes" read as misleading.
   refreshing: "Working on it…",
   fresh: "Already up to date.",
-  busy: "High refresh traffic right now — try again in a few minutes.",
-  slow: "Taking longer than usual — check back shortly.",
-  error: "Couldn't refresh — try again shortly.",
+  busy: "High refresh traffic right now. Try again in a few minutes.",
+  slow: "Taking longer than usual. Check back shortly.",
+  error: "Couldn't refresh. Try again shortly.",
 };
 
 export default function RefreshButton({ token }: { token: string }) {
