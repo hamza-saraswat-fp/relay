@@ -145,8 +145,6 @@ export default async function TrackerPage({
             </div>
             <div className={styles.sumFoot}>
               Updated {fmtDate(account.lastUpdatedISO)} · refreshes automatically
-              {/* Live data only — in seed/offline mode there is nothing to refresh. */}
-              {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
             </div>
           </aside>
         </section>
@@ -163,6 +161,8 @@ export default async function TrackerPage({
         <div className={styles.sec}>
           <h2>Open tickets</h2>
           <span className={styles.secC}>{open.length} active</span>
+          {/* Live data only — in seed/offline mode there is nothing to refresh. */}
+          {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
           <span className={styles.rule} />
         </div>
 
