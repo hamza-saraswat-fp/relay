@@ -64,34 +64,6 @@
   color: var(--ink);
   letter-spacing: -0.01em;
 }
-.synced {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--cobalt);
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 7px 14px;
-  box-shadow: 0 1px 2px rgba(0, 3, 77, 0.05);
-}
-.pulse { position: relative; width: 8px; height: 8px; }
-.pulse i { position: absolute; inset: 0; border-radius: 50%; background: var(--aqua); }
-.pulse i::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: var(--aqua);
-  animation: ring 2.2s ease-out infinite;
-}
-@keyframes ring {
-  0% { transform: scale(1); opacity: 0.7; }
-  100% { transform: scale(3.2); opacity: 0; }
-}
-
 /* hero */
 .hero {
   display: grid;
@@ -119,7 +91,7 @@
 .summary {
   background: linear-gradient(165deg, #0a0f57, #00042f);
   border-radius: 16px;
-  padding: 20px 22px;
+  padding: 22px 22px 26px;
   color: #eaf0ff;
   box-shadow: 0 18px 36px -20px rgba(0, 3, 77, 0.5);
 }
@@ -158,17 +130,10 @@
 }
 .sumL { font-size: 12px; line-height: 1.35; color: #d3d9f9; font-weight: 600; }
 .sumYou .sumN { color: var(--aqua); }
-.sumFoot {
-  font-size: 11px;
-  color: #8890cf;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(139, 142, 214, 0.18);
-}
 
-/* customer Refresh control (IAI-396) — sits in the "Open tickets" section header, on the light
-   page background. Deliberately reads as a real button: customers are told to use it when a
-   status looks stale, so it must be findable at a glance. */
+/* customer Refresh control (IAI-396) — right-aligned at the end of the "Open tickets" section
+   header, next to the "Updated <date>" stamp it acts on. Deliberately reads as a real button:
+   customers are told to use it when a status looks stale, so it must be findable at a glance. */
 .refreshWrap {
   display: inline-flex;
   align-items: center;
@@ -204,24 +169,52 @@
 @keyframes refreshspin { to { transform: rotate(360deg); } }
 .refreshMsg { font-size: 12.5px; color: var(--ink-4); }
 
-/* section head */
-/* top "how to reply" notice — same guidance as the footer, surfaced above the tickets */
-.notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 24px;
-  padding: 13px 16px;
+/* "how to reply" strip — the one thing a customer may need to *do* from this page, broken into
+   three scannable steps rather than a paragraph they have to read to find the instruction. */
+.how {
+  margin-top: 26px;
+  padding: 15px 18px 18px;
   background: var(--line-2);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
+  border-radius: 14px;
 }
-.noticeIcon { width: 16px; height: 16px; flex: none; color: var(--cobalt); margin-top: 2px; }
-.notice b { color: var(--ink); font-weight: 600; }
+.howHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.noticeIcon { width: 15px; height: 15px; flex: none; color: var(--cobalt); }
+.howSteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 22px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.howSteps li { display: flex; align-items: flex-start; gap: 10px; }
+.howNum {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--cobalt);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.howSteps b { display: block; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.howSteps p { margin: 3px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-3); }
 
+/* section head */
 .sec {
   display: flex;
   align-items: baseline;
@@ -240,6 +233,15 @@
 }
 .secC { font-size: 13px; color: var(--ink-4); }
 .rule { flex: 1; height: 1px; background: var(--line); }
+/* freshness sits beside the control that changes it, not in the summary card, so the two
+   are grouped and always wrap as a unit */
+.secEnd {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  align-self: center;
+}
+.updated { font-size: 12.5px; color: var(--ink-4); white-space: nowrap; }
 
 /* ticket card: status + subject + dates on the left, the update on the right */
 .tk {
@@ -411,39 +413,35 @@
   .hero { grid-template-columns: 1fr; align-items: stretch; gap: 22px; }
   .tk { grid-template-columns: 1fr; row-gap: 16px; }
   .meta { margin-top: 6px; }
+  .howSteps { grid-template-columns: 1fr; gap: 13px; }
 }
 
 /* phone */
 @media (max-width: 560px) {
-  /* full width forces the Refresh button onto its own row, so the heading stays on one line */
-  .refreshWrap { width: 100%; margin-top: 2px; }
-  .refreshBtn { justify-content: center; }
+  /* stamp + button take their own full-width row, so the heading stays on one line */
+  .rule { display: none; }
+  .secEnd { width: 100%; justify-content: space-between; margin-top: 4px; }
   .wrap { padding: 0 16px 84px; }
   .bar { padding: 16px 0 10px; }
   .logo { height: 20px; }
   .barDivider { height: 15px; }
   .barLabel { font-size: 16px; }
-  .synced { padding: 6px 12px; font-size: 12px; }
   .hero { margin-top: 18px; }
   .h1 { font-size: clamp(22px, 7vw, 28px); }
   .lede { font-size: 14.5px; margin-top: 8px; }
-  .summary { padding: 16px 14px; border-radius: 14px; }
+  .summary { padding: 16px 14px 20px; border-radius: 14px; }
   .sumHead { margin-bottom: 10px; }
   .sumStat { padding: 0 8px; }
   .sumN { font-size: 25px; }
   .sumL { font-size: 10px; }
-  .sumFoot { margin-top: 10px; padding-top: 10px; }
+  .how { padding: 14px 15px 16px; }
   .sec { margin: 40px 0 14px; }
   .sec h2 { font-size: 20px; }
   .tk { padding: 18px; }
   .subject { font-size: 17.5px; }
 }
 
-/* very small phones: logo + synced pill is enough, drop the section label */
+/* very small phones: the logo alone carries the header, drop the section label */
 @media (max-width: 420px) {
   .barDivider, .barLabel { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pulse i::after { animation: none; }
 }
