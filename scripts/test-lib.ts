@@ -2,7 +2,13 @@
  * Fixture tests for the pure sync helpers — no live services (IAI-212).
  * Run: npm run test:lib
  */
-import { parseCsv } from "../lib/salesforce";
+import {
+  parseCsv,
+  shouldRetryStatus,
+  backoffMs,
+  fetchWithRetry,
+  type FetchLike,
+} from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
 import {
   syncHealth,
@@ -404,8 +410,115 @@ console.log("needsReclean skip-unchanged guard (IAI-396):");
   );
 }
 
-if (failed > 0) {
-  console.error(`\n${failed} assertion(s) failed.`);
-  process.exit(1);
+console.log("retry decisions (IAI-460):");
+{
+  assert(shouldRetryStatus(500) === true, "500 → retry (transient)");
+  assert(shouldRetryStatus(502) === true, "502 → retry");
+  assert(shouldRetryStatus(503) === true, "503 → retry");
+  assert(shouldRetryStatus(429) === true, "429 → retry (rate limited)");
+  assert(shouldRetryStatus(400) === false, "400 → no retry (our bad request)");
+  assert(shouldRetryStatus(401) === false, "401 → no blind retry (sfFetch re-authenticates instead)");
+  assert(shouldRetryStatus(403) === false, "403 → no retry (permission)");
+  assert(shouldRetryStatus(404) === false, "404 → no retry");
+  assert(shouldRetryStatus(200) === false, "200 → no retry");
+
+  // Exponential with jitter (0.75x–1.25x), capped.
+  const a1 = backoffMs(1);
+  assert(a1 >= 750 && a1 <= 1250, `attempt 1 backoff within jittered 1s band (got ${a1}ms)`);
+  const a2 = backoffMs(2);
+  assert(a2 >= 1500 && a2 <= 2500, `attempt 2 backoff within jittered 2s band (got ${a2}ms)`);
+  assert(backoffMs(20) <= 10_000, "backoff stays capped no matter how high the attempt");
+  assert(backoffMs(1, 2) === 2000, "server Retry-After (2s) is honored verbatim");
+  assert(backoffMs(1, 100) === 8000, "absurd Retry-After is clamped to the cap");
 }
-console.log("\nAll fixture tests passed.");
+
+/** fetchWithRetry is async, and this harness has no top-level await — run these in a wrapper. */
+async function asyncTests() {
+  console.log("fetchWithRetry (IAI-460):");
+  const noSleep = async () => {};
+  const ok = () => new Response("ok", { status: 200 });
+
+  // Retry logging is deliberate in production but noise here.
+  const realWarn = console.warn;
+  console.warn = () => {};
+
+  try {
+    {
+      let calls = 0;
+      const fake: FetchLike = async () => {
+        calls++;
+        if (calls < 3) throw new Error("fetch failed"); // the actual 2026-07-29 failure mode
+        return ok();
+      };
+      const res = await fetchWithRetry("https://x", {}, { fetchImpl: fake, sleepImpl: noSleep });
+      assert(res.status === 200 && calls === 3, "network throw x2 then success → resolves (3 calls)");
+    }
+
+    {
+      let calls = 0;
+      const fake: FetchLike = async () => {
+        calls++;
+        throw new Error("fetch failed");
+      };
+      let threw = false;
+      try {
+        await fetchWithRetry("https://x", {}, { fetchImpl: fake, sleepImpl: noSleep });
+      } catch {
+        threw = true;
+      }
+      assert(threw && calls === 3, "persistent network failure → throws after exactly 3 attempts");
+    }
+
+    {
+      let calls = 0;
+      const fake: FetchLike = async () => {
+        calls++;
+        return calls < 3 ? new Response("", { status: 503 }) : ok();
+      };
+      const res = await fetchWithRetry("https://x", {}, { fetchImpl: fake, sleepImpl: noSleep });
+      assert(res.status === 200 && calls === 3, "503 x2 then 200 → resolves");
+    }
+
+    {
+      let calls = 0;
+      const fake: FetchLike = async () => {
+        calls++;
+        return new Response("bad soql", { status: 400 });
+      };
+      const res = await fetchWithRetry("https://x", {}, { fetchImpl: fake, sleepImpl: noSleep });
+      assert(
+        res.status === 400 && calls === 1,
+        "400 → returned to caller immediately, no wasted retries",
+      );
+    }
+
+    {
+      let calls = 0;
+      const fake: FetchLike = async () => {
+        calls++;
+        throw new Error("fetch failed");
+      };
+      let threw = false;
+      try {
+        await fetchWithRetry(
+          "https://x",
+          {},
+          { fetchImpl: fake, sleepImpl: noSleep, deadline: Date.now() - 1 },
+        );
+      } catch {
+        threw = true;
+      }
+      assert(threw && calls === 1, "expired deadline → fails fast, never sleeps into overrun");
+    }
+  } finally {
+    console.warn = realWarn;
+  }
+}
+
+asyncTests().then(() => {
+  if (failed > 0) {
+    console.error(`\n${failed} assertion(s) failed.`);
+    process.exit(1);
+  }
+  console.log("\nAll fixture tests passed.");
+});
