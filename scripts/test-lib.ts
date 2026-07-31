@@ -14,6 +14,7 @@ import {
   syncHealth,
   refreshGate,
   scopedRefreshAllowed,
+  onboardingSyncDecision,
   MANUAL_COOLDOWN_MS,
   MAX_SCOPED_PER_HOUR,
   type SyncRunRow,
@@ -340,6 +341,61 @@ console.log("scopedRefreshAllowed global safety valve (IAI-398):");
     started_at: minsAgo(10), finished_at: minsAgo(8), status: "ok", cases_upserted: 21, error: null, scope: "full",
   }));
   assert(scopedRefreshAllowed(fulls, NOW) === true, "full cron runs don't count toward the valve");
+}
+
+console.log("onboardingSyncDecision — case-created webhook gate (IAI-474):");
+{
+  const NOW = Date.parse("2026-07-22T18:00:00Z");
+  const minsAgo = (m: number) => new Date(NOW - m * 60000).toISOString();
+  const ME = "acct-newly-onboarded";
+  const OTHER = "acct-overhead";
+  const run = (o: Partial<SyncRunRow> = {}): SyncRunRow => ({
+    started_at: minsAgo(30), finished_at: minsAgo(26), status: "ok", cases_upserted: 5, error: null,
+    scope: "full", ...o,
+  });
+
+  assert(onboardingSyncDecision([], ME, NOW) === "sync", "no runs → sync");
+
+  // THE REGRESSION ASSERTION — the whole point of IAI-474. refreshGate would say "cooldown" here
+  // (a full run covers every account), which would leave the brand-new page empty for 2h. The
+  // triggering case was created AFTER that run started, so the run cannot contain it.
+  assert(
+    onboardingSyncDecision([run({ started_at: minsAgo(1), finished_at: minsAgo(0) })], ME, NOW) === "sync",
+    "full cron run 1m ago must NOT block onboarding (it predates the new case)",
+  );
+  assert(
+    onboardingSyncDecision(
+      [run({ started_at: minsAgo(1), finished_at: null, status: "running" })], ME, NOW,
+    ) === "sync",
+    "full cron mid-flight must NOT block onboarding either",
+  );
+  assert(
+    onboardingSyncDecision([run({ scope: undefined, started_at: minsAgo(1) })], ME, NOW) === "sync",
+    "pre-migration row (reads as full) must NOT block onboarding",
+  );
+
+  // The 10-min window survives as a per-account RATE LIMIT: a burst of cases costs one sync.
+  assert(
+    onboardingSyncDecision([run({ started_at: minsAgo(2), finished_at: minsAgo(1), scope: ME })], ME, NOW)
+      === "cooldown",
+    "own scoped run 2m ago → cooldown (rate limit, not a freshness claim)",
+  );
+  assert(
+    onboardingSyncDecision([run({ started_at: minsAgo(30), finished_at: minsAgo(29), scope: ME })], ME, NOW)
+      === "sync",
+    "own scoped run 30m ago → past the rate limit, sync",
+  );
+  assert(
+    onboardingSyncDecision([run({ started_at: minsAgo(1), finished_at: null, status: "running", scope: OTHER })], ME, NOW)
+      === "sync",
+    "another account's scoped run must never consume this account's budget",
+  );
+
+  // Valve still applies — a skipped sync just falls back to the cron, i.e. today's behavior.
+  const maxed: SyncRunRow[] = Array.from({ length: MAX_SCOPED_PER_HOUR }, (_, i) =>
+    run({ started_at: minsAgo(30), finished_at: minsAgo(30), scope: `acct-${i}` }),
+  );
+  assert(onboardingSyncDecision(maxed, ME, NOW) === "valve", "org-wide valve maxed → valve");
 }
 
 console.log("syncHealth ignores scoped runs (IAI-398):");
