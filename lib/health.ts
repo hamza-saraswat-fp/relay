@@ -139,3 +139,33 @@ export function scopedRefreshAllowed(rows: SyncRunRow[], nowMs: number = Date.no
   ).length;
   return recentScoped < MAX_SCOPED_PER_HOUR;
 }
+
+export type OnboardingSyncDecision = "sync" | "cooldown" | "valve";
+
+/**
+ * Should a case-created webhook kick off a scoped sync for this account? (IAI-474) Pure.
+ *
+ * Deliberately NOT plain `refreshGate`. That helper counts a recent FULL run as covering the
+ * account, which is right for the Refresh button but wrong here: this webhook fires *because a
+ * case was just created*, so any full run already under way started before that case existed and
+ * cannot have picked it up. Gating on it would skip the sync whenever the cron ran in the last
+ * 10 minutes — leaving the customer's page reading "you are all caught up" for up to 2h, which is
+ * the exact bug this closes. Same reasoning for a brand-new account (the cron never saw it) and
+ * for a second ticket on an existing one.
+ *
+ * So only THIS account's own scoped runs are considered, and the 10-minute window acts as a rate
+ * limiter rather than a freshness check: five cases on one account within 10 minutes cost one sync,
+ * not five. Worst case a ticket waits 10 minutes to appear instead of two hours.
+ *
+ * The org-wide valve still applies — a skipped sync just falls back to the next cron, i.e. exactly
+ * today's behavior, so it is never worse than not having this at all.
+ */
+export function onboardingSyncDecision(
+  rows: SyncRunRow[],
+  accountId: string,
+  nowMs: number = Date.now(),
+): OnboardingSyncDecision {
+  if (!scopedRefreshAllowed(rows, nowMs)) return "valve";
+  const own = rows.filter((r) => r.scope === accountId);
+  return refreshGate(own, accountId, nowMs).state === "allowed" ? "sync" : "cooldown";
+}
