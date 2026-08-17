@@ -121,6 +121,19 @@ export interface SyncScope {
   accountId: string;
 }
 
+/**
+ * Bulk-poll budget for a SCOPED run, shared across both queries (IAI-567).
+ *
+ * The 2026-08-11 onboarding failure: org-wide Bulk queue congestion held a healthy job in
+ * InProgress past the default 90s poll budget, so a brand-new account's page stayed empty.
+ * 90s is right for the cron — it runs two queries PLUS cleans hundreds of tickets inside the
+ * same 300s maxDuration — but a scoped run cleans at most a handful and typically finishes in
+ * ~17s total, so it can afford to out-wait congestion. 200s SHARED across both sequential
+ * queries (an absolute deadline, not per-query — two 200s budgets could total 400s and recreate
+ * the exact hard-kill this avoids) leaves ~100s for cleaning and upserts.
+ */
+export const SCOPED_POLL_BUDGET_MS = 200 * 1000;
+
 export async function runSync(scope?: SyncScope): Promise<SyncResult> {
   const supabase = getServiceClient();
 
@@ -164,8 +177,11 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
     }
 
     // 1. Pull cases for known accounts only; guard against any stray non-tracked account.
+    // Scoped runs get one shared, longer poll deadline across both Bulk queries (IAI-567);
+    // full cron runs keep the default per-query budget (undefined → 90s inside runBulkQuery).
+    const pollDeadline = scope ? Date.now() + SCOPED_POLL_BUDGET_MS : undefined;
     const knownSet = new Set(knownSf);
-    const rawCaseRows = await runBulkQuery(caseSoql(knownSf));
+    const rawCaseRows = await runBulkQuery(caseSoql(knownSf), { deadlineMs: pollDeadline });
     const caseRows = rawCaseRows.filter((c) => knownSet.has(c.AccountId));
 
     // 2. Refresh tracked accounts' name/parent. Update-only: every AccountId here is already known,
@@ -187,7 +203,9 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
 
     // 3. Latest outbound email per changed case (for the "latest update").
     const caseIds = caseRows.map((c) => c.Id);
-    const emailRows = caseIds.length ? await runBulkQuery(emailSoql(caseIds)) : [];
+    const emailRows = caseIds.length
+      ? await runBulkQuery(emailSoql(caseIds), { deadlineMs: pollDeadline })
+      : [];
     const latestEmail = latestOutboundByCase(emailRows);
 
     // 3b. Prior state for the skip-unchanged guard. MUST be read BEFORE the upsert below, which

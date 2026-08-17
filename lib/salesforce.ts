@@ -210,11 +210,17 @@ async function sfFetch(
  * actually created, the retry leaves an orphan job that completes and is never read — ~1 wasted
  * Bulk job out of the org's 10,000/day, an accepted trade for closing that failure surface.
  */
-export async function runBulkQuery(soql: string): Promise<Record<string, string>[]> {
+export async function runBulkQuery(
+  soql: string,
+  opts: { deadlineMs?: number } = {},
+): Promise<Record<string, string>[]> {
   const token = await getToken();
   const base = `${token.instanceUrl}/services/data/${API_VERSION}/jobs/query`;
   // One budget for the whole query, so retry sleeps can't extend it past the caller's limit.
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  // Callers with room to spare can pass an absolute deadline instead (IAI-567): a scoped
+  // onboarding sync does little cleaning, so it can afford to out-wait Bulk queue congestion
+  // that the default budget (sized for the much heavier cron) cannot.
+  const deadline = opts.deadlineMs ?? Date.now() + POLL_TIMEOUT_MS;
 
   // 1. Create the query job.
   const createRes = await sfFetch(
