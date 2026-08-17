@@ -19,7 +19,16 @@ import {
   MAX_SCOPED_PER_HOUR,
   type SyncRunRow,
 } from "../lib/health";
-import { needsReclean, caseSoql, SCOPED_POLL_BUDGET_MS } from "../lib/sync";
+import {
+  needsReclean,
+  caseSoql,
+  SCOPED_POLL_BUDGET_MS,
+  reconcileDecision,
+  RECONCILE_SMALL_MAX,
+  RECONCILE_MAX_DELETE_FRACTION,
+  RECONCILE_ABS_MAX,
+  type ReconcileRow,
+} from "../lib/sync";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
@@ -446,6 +455,133 @@ console.log("caseSoql shape — Merged exclusion (IAI-566):");
   assert(
     soql.includes(`'001U100000dqc5xIAA','001U100000c1eVNIAY'`),
     "account ids quoted into the IN list",
+  );
+}
+
+console.log("reconcileDecision post-sync reconciliation (IAI-565):");
+{
+  let n = 0;
+  const row = (accountId: string, sfCaseId?: string): ReconcileRow => ({
+    id: `row-${++n}`,
+    sfCaseId: sfCaseId ?? `case-${n}`,
+    accountId,
+  });
+  const ids = (rows: ReconcileRow[]) => new Set(rows.map((r) => r.sfCaseId));
+  const A = "acct-a";
+  const B = "acct-b";
+
+  // 1. Brand-new deploy: nothing stored yet.
+  {
+    const d = reconcileDecision([], new Set(["x"]), new Set([A]));
+    assert(d.toDeleteIds.length === 0 && !d.blocked, "empty table → no-op, not blocked");
+  }
+  // 2. Steady state: everything stored was returned.
+  {
+    const rows = [row(A), row(A), row(A)];
+    const d = reconcileDecision(rows, ids(rows), new Set([A]));
+    assert(d.toDeleteIds.length === 0 && !d.blocked, "all rows returned → no deletes");
+  }
+  // 3. One stale row → exactly that row (content, not just count).
+  {
+    const stale = row(A, "gone-1");
+    const live = row(A, "live-1");
+    const d = reconcileDecision([stale, live], new Set(["live-1"]), new Set([A]));
+    assert(
+      d.toDeleteIds.length === 1 && d.toDeleteIds[0] === stale.id,
+      "single stale row → exactly its id deleted",
+    );
+  }
+  // 4. Stale row on a NON-covered account (malformed sf_account_id skipped from the SOQL).
+  {
+    const d = reconcileDecision([row(B, "gone-2")], new Set<string>(), new Set([A]));
+    assert(
+      d.toDeleteIds.length === 0 && !d.blocked,
+      "row on a non-covered account → never a candidate (absence proves nothing)",
+    );
+  }
+  // 5. THE scoped-wipe assertion: a scoped run must be structurally incapable of touching
+  //    other accounts, even though none of their case ids appear in its result set.
+  {
+    const mine = [row(A, "a-live"), row(A, "a-stale")];
+    const others = Array.from({ length: 30 }, () => row(B));
+    const d = reconcileDecision([...mine, ...others], new Set(["a-live"]), new Set([A]));
+    assert(
+      d.toDeleteIds.length === 1 && d.toDeleteIds[0] === mine[1].id,
+      "scoped run deletes only its own account's stale row — 30 other-account rows untouched",
+    );
+  }
+  // 6. Legit zero-out: an account whose few cases all aged out clears via the small-max.
+  {
+    const rows = [row(A), row(A), row(A), row(A)];
+    const d = reconcileDecision(rows, new Set<string>(), new Set([A]));
+    assert(
+      d.toDeleteIds.length === 4 && !d.blocked,
+      "account legitimately going to zero (≤ small-max) → allowed, no deadlock",
+    );
+  }
+  // 7. Empty bulk result against a real table → mass-wipe guard.
+  {
+    const rows = Array.from({ length: 200 }, () => row(A));
+    const d = reconcileDecision(rows, new Set<string>(), new Set([A]));
+    assert(d.blocked && d.toDeleteIds.length === 0, "empty result vs 200 rows → BLOCKED, zero deletes");
+    assert(
+      (d.reason ?? "").includes("200") && (d.reason ?? "").includes("200"),
+      "blocked reason reports the counts",
+    );
+  }
+  // 8. Fraction boundary at 30% of covered rows.
+  {
+    const rows = Array.from({ length: 100 }, (_, i) => row(A, `c-${i}`));
+    const returned30 = new Set(rows.slice(30).map((r) => r.sfCaseId));
+    const returned31 = new Set(rows.slice(31).map((r) => r.sfCaseId));
+    assert(
+      reconcileDecision(rows, returned30, new Set([A])).blocked === false,
+      "E=100 D=30 → allowed (at the fraction cap)",
+    );
+    assert(
+      reconcileDecision(rows, returned31, new Set([A])).blocked === true,
+      "E=100 D=31 → blocked (past the fraction cap)",
+    );
+  }
+  // 9. Absolute ceiling binds even when the fraction would allow it.
+  {
+    const rows = Array.from({ length: 1000 }, (_, i) => row(A, `k-${i}`));
+    const returned100 = new Set(rows.slice(100).map((r) => r.sfCaseId));
+    const returned101 = new Set(rows.slice(101).map((r) => r.sfCaseId));
+    assert(
+      reconcileDecision(rows, returned100, new Set([A])).blocked === false,
+      "E=1000 D=100 → allowed (abs ceiling)",
+    );
+    assert(
+      reconcileDecision(rows, returned101, new Set([A])).blocked === true,
+      "E=1000 D=101 → blocked despite being ~10% (abs ceiling binds)",
+    );
+  }
+  // 10. Small-max boundary.
+  {
+    const at = Array.from({ length: RECONCILE_SMALL_MAX }, (_, i) => row(A, `s-${i}`));
+    assert(
+      reconcileDecision(at, new Set<string>(), new Set([A])).blocked === false,
+      `E=D=${RECONCILE_SMALL_MAX} → allowed (100% deletion under the small-max exemption)`,
+    );
+    const rows25 = Array.from({ length: 25 }, (_, i) => row(A, `t-${i}`));
+    const d = reconcileDecision(rows25, new Set(rows25.slice(21).map((r) => r.sfCaseId)), new Set([A]));
+    assert(d.blocked === true, "E=25 D=21 → blocked (past small-max, fraction 7.5 fails too)");
+  }
+  // 11. First-run regression pin: the caps must admit the cleanup this ships for
+  //     (~22 Merged + ~28 aged-out against a ~575-row table).
+  {
+    const rows = Array.from({ length: 575 }, (_, i) => row(A, `f-${i}`));
+    const d = reconcileDecision(rows, new Set(rows.slice(50).map((r) => r.sfCaseId)), new Set([A]));
+    assert(
+      d.blocked === false && d.toDeleteIds.length === 50,
+      "E=575 D=50 → allowed (first reconciled run clears the backlog)",
+    );
+  }
+  // Constants sanity so a future tweak can't silently invert the design.
+  assert(
+    RECONCILE_SMALL_MAX < RECONCILE_ABS_MAX && RECONCILE_MAX_DELETE_FRACTION < 1,
+    "cap constants keep their intended ordering",
   );
 }
 

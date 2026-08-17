@@ -103,6 +103,72 @@ export function needsReclean(
   return false;
 }
 
+/** One existing Supabase case row, as considered by reconciliation. */
+export interface ReconcileRow {
+  id: string;
+  sfCaseId: string;
+  accountId: string;
+}
+
+export interface ReconcileDecision {
+  toDeleteIds: string[];
+  blocked: boolean;
+  reason?: string;
+}
+
+/** Deletions of ≤ this many rows are always allowed — covers normal churn and a small account
+ *  legitimately going to zero (all its cases aged out), which a fraction cap alone would deadlock. */
+export const RECONCILE_SMALL_MAX = 20;
+/** Above the small-max, refuse to delete more than this fraction of the covered rows in one run. */
+export const RECONCILE_MAX_DELETE_FRACTION = 0.3;
+/** Hard per-run ceiling regardless of fraction. */
+export const RECONCILE_ABS_MAX = 100;
+
+/**
+ * Which stored case rows should this sync remove, and is it safe to? (IAI-565) Pure.
+ *
+ * The Bulk result IS the authoritative in-scope set for the accounts it covered: a stored case
+ * that no longer appears has been deleted, merged, re-typed out of tech support, reassigned, or
+ * resolved >30 days ago — all of which previously accumulated forever and rendered on customer
+ * pages (34% of accounts showed at least one phantom row when this shipped).
+ *
+ * Deleting from a query result demands that a truncated-but-"successful" result can never mass-
+ * wipe, hence the caps: an empty/half result fails the fraction and absolute caps and deletes
+ * NOTHING (the guard working, not a failure — the next run retries); ordinary churn and small
+ * accounts clearing out entirely pass via the small-max. Scoped runs have a small covered set, so
+ * they're naturally conservative; the full cron, with the whole table as denominator, is the
+ * sweeper that picks up anything a blocked scoped run left behind.
+ *
+ * Only rows in `coveredAccountIds` are ever candidates — a scoped run is structurally incapable
+ * of touching other accounts' rows, and accounts skipped from the SOQL for a malformed
+ * sf_account_id are never diffed (their absence from the result proves nothing).
+ */
+export function reconcileDecision(
+  existingRows: ReconcileRow[],
+  returnedSfIds: Set<string>,
+  coveredAccountIds: Set<string>,
+): ReconcileDecision {
+  const covered = existingRows.filter((r) => coveredAccountIds.has(r.accountId));
+  const candidates = covered.filter((r) => !returnedSfIds.has(r.sfCaseId));
+  if (candidates.length === 0) return { toDeleteIds: [], blocked: false };
+
+  const allowance = Math.max(
+    RECONCILE_SMALL_MAX,
+    Math.min(RECONCILE_MAX_DELETE_FRACTION * covered.length, RECONCILE_ABS_MAX),
+  );
+  if (candidates.length > allowance) {
+    return {
+      toDeleteIds: [],
+      blocked: true,
+      reason:
+        `would delete ${candidates.length} of ${covered.length} covered rows ` +
+        `(allowance ${Math.floor(allowance)}: small=${RECONCILE_SMALL_MAX}, ` +
+        `fraction=${RECONCILE_MAX_DELETE_FRACTION}, abs=${RECONCILE_ABS_MAX})`,
+    };
+  }
+  return { toDeleteIds: candidates.map((r) => r.id), blocked: false };
+}
+
 function stripHtml(s: string): string {
   return s
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -180,6 +246,10 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
     // Scoped runs get one shared, longer poll deadline across both Bulk queries (IAI-567);
     // full cron runs keep the default per-query budget (undefined → 90s inside runBulkQuery).
     const pollDeadline = scope ? Date.now() + SCOPED_POLL_BUDGET_MS : undefined;
+    // Snapshot taken BEFORE the bulk query — reconciliation later only considers rows written
+    // before this instant, so a case onboarded by a concurrent scoped sync (whose row this run's
+    // already-started query can't contain) is never mistaken for stale (IAI-565).
+    const syncStartedAt = new Date().toISOString();
     const knownSet = new Set(knownSf);
     const rawCaseRows = await runBulkQuery(caseSoql(knownSf), { deadlineMs: pollDeadline });
     const caseRows = rawCaseRows.filter((c) => knownSet.has(c.AccountId));
@@ -307,6 +377,55 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
       }
     }
     console.log(`[relay] sync: ${recleaned} update(s) re-cleaned, ${skipped} unchanged (skipped)`);
+
+    // 6. Reconcile: remove stored cases the query no longer returns (IAI-565) — deleted, merged,
+    //    re-typed out of tech support, reassigned, or resolved >30d. Runs LAST, only on a run that
+    //    has proven healthy end-to-end (everything above throws into the catch below on failure,
+    //    so a broken pull can never feed the diff), and its own failure never fails the run —
+    //    reconciliation is idempotent and the next run retries. case_updates rows follow via the
+    //    schema's on-delete cascade.
+    try {
+      let existingQuery = supabase
+        .from("cases")
+        .select("id, sf_case_id, account_id")
+        .lt("updated_at", syncStartedAt);
+      if (scope) existingQuery = existingQuery.eq("account_id", scope.accountId);
+      const { data: existing, error: existingErr } = await existingQuery;
+      if (existingErr) throw existingErr;
+
+      const decision = reconcileDecision(
+        (existing ?? []).map((r) => ({
+          id: r.id as string,
+          sfCaseId: r.sf_case_id as string,
+          accountId: r.account_id as string,
+        })),
+        new Set(caseRows.map((c) => c.Id)),
+        new Set(knownSf.map((sf) => acctIdBySf.get(sf)!)),
+      );
+
+      if (decision.blocked) {
+        console.warn(`[relay] sync: reconcile BLOCKED — ${decision.reason}`);
+      } else {
+        let deleted = 0;
+        for (let i = 0; i < decision.toDeleteIds.length; i += 100) {
+          const batch = decision.toDeleteIds.slice(i, i + 100);
+          const { data: gone, error: delErr } = await supabase
+            .from("cases")
+            .delete()
+            .in("id", batch)
+            .select("id");
+          if (delErr) {
+            // Partial deletion is fine — the remainder goes next run.
+            console.error("[relay] sync: reconcile delete batch failed:", delErr);
+            continue;
+          }
+          deleted += gone?.length ?? 0;
+        }
+        console.log(`[relay] sync: reconcile deleted ${deleted} stale case(s)`);
+      }
+    } catch (err) {
+      console.error("[relay] sync: reconcile failed:", err);
+    }
 
     if (runId) {
       await supabase
