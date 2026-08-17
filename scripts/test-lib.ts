@@ -461,10 +461,14 @@ console.log("caseSoql shape — Merged exclusion (IAI-566):");
 console.log("reconcileDecision post-sync reconciliation (IAI-565):");
 {
   let n = 0;
-  const row = (accountId: string, sfCaseId?: string): ReconcileRow => ({
+  const SNAP = "2026-08-17T18:00:00.000Z";
+  const OLD = "2026-08-16T12:00:00+00:00"; // PostgREST offset format, before the snapshot
+  const FRESH = "2026-08-17T18:00:05+00:00"; // written after the snapshot (concurrent insert)
+  const row = (accountId: string, sfCaseId?: string, updatedAtIso: string = OLD): ReconcileRow => ({
     id: `row-${++n}`,
     sfCaseId: sfCaseId ?? `case-${n}`,
     accountId,
+    updatedAtIso,
   });
   const ids = (rows: ReconcileRow[]) => new Set(rows.map((r) => r.sfCaseId));
   const A = "acct-a";
@@ -472,20 +476,20 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
 
   // 1. Brand-new deploy: nothing stored yet.
   {
-    const d = reconcileDecision([], new Set(["x"]), new Set([A]));
+    const d = reconcileDecision([], new Set(["x"]), new Set([A]), SNAP);
     assert(d.toDeleteIds.length === 0 && !d.blocked, "empty table → no-op, not blocked");
   }
   // 2. Steady state: everything stored was returned.
   {
     const rows = [row(A), row(A), row(A)];
-    const d = reconcileDecision(rows, ids(rows), new Set([A]));
+    const d = reconcileDecision(rows, ids(rows), new Set([A]), SNAP);
     assert(d.toDeleteIds.length === 0 && !d.blocked, "all rows returned → no deletes");
   }
   // 3. One stale row → exactly that row (content, not just count).
   {
     const stale = row(A, "gone-1");
     const live = row(A, "live-1");
-    const d = reconcileDecision([stale, live], new Set(["live-1"]), new Set([A]));
+    const d = reconcileDecision([stale, live], new Set(["live-1"]), new Set([A]), SNAP);
     assert(
       d.toDeleteIds.length === 1 && d.toDeleteIds[0] === stale.id,
       "single stale row → exactly its id deleted",
@@ -493,7 +497,7 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
   }
   // 4. Stale row on a NON-covered account (malformed sf_account_id skipped from the SOQL).
   {
-    const d = reconcileDecision([row(B, "gone-2")], new Set<string>(), new Set([A]));
+    const d = reconcileDecision([row(B, "gone-2")], new Set<string>(), new Set([A]), SNAP);
     assert(
       d.toDeleteIds.length === 0 && !d.blocked,
       "row on a non-covered account → never a candidate (absence proves nothing)",
@@ -504,7 +508,7 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
   {
     const mine = [row(A, "a-live"), row(A, "a-stale")];
     const others = Array.from({ length: 30 }, () => row(B));
-    const d = reconcileDecision([...mine, ...others], new Set(["a-live"]), new Set([A]));
+    const d = reconcileDecision([...mine, ...others], new Set(["a-live"]), new Set([A]), SNAP);
     assert(
       d.toDeleteIds.length === 1 && d.toDeleteIds[0] === mine[1].id,
       "scoped run deletes only its own account's stale row — 30 other-account rows untouched",
@@ -513,7 +517,7 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
   // 6. Legit zero-out: an account whose few cases all aged out clears via the small-max.
   {
     const rows = [row(A), row(A), row(A), row(A)];
-    const d = reconcileDecision(rows, new Set<string>(), new Set([A]));
+    const d = reconcileDecision(rows, new Set<string>(), new Set([A]), SNAP);
     assert(
       d.toDeleteIds.length === 4 && !d.blocked,
       "account legitimately going to zero (≤ small-max) → allowed, no deadlock",
@@ -522,7 +526,7 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
   // 7. Empty bulk result against a real table → mass-wipe guard.
   {
     const rows = Array.from({ length: 200 }, () => row(A));
-    const d = reconcileDecision(rows, new Set<string>(), new Set([A]));
+    const d = reconcileDecision(rows, new Set<string>(), new Set([A]), SNAP);
     assert(d.blocked && d.toDeleteIds.length === 0, "empty result vs 200 rows → BLOCKED, zero deletes");
     assert(
       (d.reason ?? "").includes("200") && (d.reason ?? "").includes("200"),
@@ -535,11 +539,11 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
     const returned30 = new Set(rows.slice(30).map((r) => r.sfCaseId));
     const returned31 = new Set(rows.slice(31).map((r) => r.sfCaseId));
     assert(
-      reconcileDecision(rows, returned30, new Set([A])).blocked === false,
+      reconcileDecision(rows, returned30, new Set([A]), SNAP).blocked === false,
       "E=100 D=30 → allowed (at the fraction cap)",
     );
     assert(
-      reconcileDecision(rows, returned31, new Set([A])).blocked === true,
+      reconcileDecision(rows, returned31, new Set([A]), SNAP).blocked === true,
       "E=100 D=31 → blocked (past the fraction cap)",
     );
   }
@@ -549,11 +553,11 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
     const returned100 = new Set(rows.slice(100).map((r) => r.sfCaseId));
     const returned101 = new Set(rows.slice(101).map((r) => r.sfCaseId));
     assert(
-      reconcileDecision(rows, returned100, new Set([A])).blocked === false,
+      reconcileDecision(rows, returned100, new Set([A]), SNAP).blocked === false,
       "E=1000 D=100 → allowed (abs ceiling)",
     );
     assert(
-      reconcileDecision(rows, returned101, new Set([A])).blocked === true,
+      reconcileDecision(rows, returned101, new Set([A]), SNAP).blocked === true,
       "E=1000 D=101 → blocked despite being ~10% (abs ceiling binds)",
     );
   }
@@ -561,21 +565,50 @@ console.log("reconcileDecision post-sync reconciliation (IAI-565):");
   {
     const at = Array.from({ length: RECONCILE_SMALL_MAX }, (_, i) => row(A, `s-${i}`));
     assert(
-      reconcileDecision(at, new Set<string>(), new Set([A])).blocked === false,
+      reconcileDecision(at, new Set<string>(), new Set([A]), SNAP).blocked === false,
       `E=D=${RECONCILE_SMALL_MAX} → allowed (100% deletion under the small-max exemption)`,
     );
     const rows25 = Array.from({ length: 25 }, (_, i) => row(A, `t-${i}`));
-    const d = reconcileDecision(rows25, new Set(rows25.slice(21).map((r) => r.sfCaseId)), new Set([A]));
+    const d = reconcileDecision(rows25, new Set(rows25.slice(21).map((r) => r.sfCaseId)), new Set([A]), SNAP);
     assert(d.blocked === true, "E=25 D=21 → blocked (past small-max, fraction 7.5 fails too)");
   }
   // 11. First-run regression pin: the caps must admit the cleanup this ships for
   //     (~22 Merged + ~28 aged-out against a ~575-row table).
   {
     const rows = Array.from({ length: 575 }, (_, i) => row(A, `f-${i}`));
-    const d = reconcileDecision(rows, new Set(rows.slice(50).map((r) => r.sfCaseId)), new Set([A]));
+    const d = reconcileDecision(rows, new Set(rows.slice(50).map((r) => r.sfCaseId)), new Set([A]), SNAP);
     assert(
       d.blocked === false && d.toDeleteIds.length === 50,
       "E=575 D=50 → allowed (first reconciled run clears the backlog)",
+    );
+  }
+  // 12. Race guard: a row written AFTER the snapshot (concurrent webhook onboarding insert) is
+  //     never deleted even though it isn't in this run's result — but it still counts as covered.
+  {
+    const fresh = row("acct-a", "fresh-1", FRESH);
+    const stale = row("acct-a", "stale-1", OLD);
+    const d = reconcileDecision([fresh, stale], new Set<string>(), new Set(["acct-a"]), SNAP);
+    assert(
+      d.toDeleteIds.length === 1 && d.toDeleteIds[0] === stale.id,
+      "post-snapshot row spared (race guard), pre-snapshot stale row still deleted",
+    );
+  }
+  // 13. THE DENOMINATOR REGRESSION PIN — the v1 shipped bug. A full sync re-upserts every live
+  //     row (fresh updated_at); the covered denominator must still include them, or a routine
+  //     cleanup reads as "deleting 100% of covered rows" and blocks forever. 418 fresh + 47 stale:
+  //     E must be 465 (allowance 100), NOT 47 (allowance 20).
+  {
+    const live = Array.from({ length: 418 }, (_, i) => row("acct-a", `live-${i}`, FRESH));
+    const stale = Array.from({ length: 47 }, (_, i) => row("acct-a", `stale-${i}`, OLD));
+    const d = reconcileDecision(
+      [...live, ...stale],
+      new Set(live.map((r) => r.sfCaseId)),
+      new Set(["acct-a"]),
+      SNAP,
+    );
+    assert(
+      d.blocked === false && d.toDeleteIds.length === 47,
+      "just-re-upserted live rows keep the denominator honest (E=465 → 47 deletions allowed)",
     );
   }
   // Constants sanity so a future tweak can't silently invert the design.

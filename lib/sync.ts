@@ -108,6 +108,9 @@ export interface ReconcileRow {
   id: string;
   sfCaseId: string;
   accountId: string;
+  /** Row's updated_at — used to spare rows written after the run's snapshot, never to shrink
+   *  the covered denominator (see the shipped-bug note on `reconcileDecision`). */
+  updatedAtIso: string;
 }
 
 export interface ReconcileDecision {
@@ -142,14 +145,28 @@ export const RECONCILE_ABS_MAX = 100;
  * Only rows in `coveredAccountIds` are ever candidates — a scoped run is structurally incapable
  * of touching other accounts' rows, and accounts skipped from the SOQL for a malformed
  * sf_account_id are never diffed (their absence from the result proves nothing).
+ *
+ * `snapshotIso` is the race guard: a row written at-or-after the run's pre-query snapshot (e.g. a
+ * case inserted by a concurrent webhook onboarding sync) can't be in this run's result and must
+ * never be deleted for it — but it still COUNTS as a covered row. The shipped v1 applied this
+ * filter to the DB query instead, which silently excluded every row the run had just re-upserted:
+ * the denominator collapsed to exactly the stale set, the fraction cap read every cleanup as
+ * "deleting 100% of what I can see", and full-run reconciliation blocked forever. The denominator
+ * must always be ALL covered rows; the timestamp only disqualifies deletion candidates.
  */
 export function reconcileDecision(
   existingRows: ReconcileRow[],
   returnedSfIds: Set<string>,
   coveredAccountIds: Set<string>,
+  snapshotIso: string,
 ): ReconcileDecision {
+  const snapshotMs = new Date(snapshotIso).getTime();
   const covered = existingRows.filter((r) => coveredAccountIds.has(r.accountId));
-  const candidates = covered.filter((r) => !returnedSfIds.has(r.sfCaseId));
+  const candidates = covered.filter(
+    // Epoch comparison: PostgREST serializes timestamps as `+00:00`, Date.toISOString as `Z` —
+    // lexicographic comparison across the two formats is not reliable.
+    (r) => !returnedSfIds.has(r.sfCaseId) && new Date(r.updatedAtIso).getTime() < snapshotMs,
+  );
   if (candidates.length === 0) return { toDeleteIds: [], blocked: false };
 
   const allowance = Math.max(
@@ -385,10 +402,10 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
     //    reconciliation is idempotent and the next run retries. case_updates rows follow via the
     //    schema's on-delete cascade.
     try {
-      let existingQuery = supabase
-        .from("cases")
-        .select("id, sf_case_id, account_id")
-        .lt("updated_at", syncStartedAt);
+      // ALL rows for the covered scope — the timestamp guard lives in reconcileDecision, applied
+      // to candidates only. Filtering here would exclude the rows this run just re-upserted and
+      // collapse the safety cap's denominator to the stale set itself (the v1 shipped bug).
+      let existingQuery = supabase.from("cases").select("id, sf_case_id, account_id, updated_at");
       if (scope) existingQuery = existingQuery.eq("account_id", scope.accountId);
       const { data: existing, error: existingErr } = await existingQuery;
       if (existingErr) throw existingErr;
@@ -398,9 +415,11 @@ export async function runSync(scope?: SyncScope): Promise<SyncResult> {
           id: r.id as string,
           sfCaseId: r.sf_case_id as string,
           accountId: r.account_id as string,
+          updatedAtIso: r.updated_at as string,
         })),
         new Set(caseRows.map((c) => c.Id)),
         new Set(knownSf.map((sf) => acctIdBySf.get(sf)!)),
+        syncStartedAt,
       );
 
       if (decision.blocked) {
