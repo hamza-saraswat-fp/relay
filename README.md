@@ -96,6 +96,10 @@ a raw internal status):
 | Closed · Cannot Reproduce · Rejected · Merged | `resolved` |
 | *(anything else)* | `in_progress` |
 
+Cases with `Status = 'Merged'` are excluded from the sync query itself (IAI-566) — a merged case
+is a duplicate shell of its parent case, so it never reaches the tracker. The chip mapping above
+remains as a safe default only.
+
 ## Environment variables
 
 Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Vercel project settings.

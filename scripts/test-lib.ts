@@ -19,7 +19,7 @@ import {
   MAX_SCOPED_PER_HOUR,
   type SyncRunRow,
 } from "../lib/health";
-import { needsReclean } from "../lib/sync";
+import { needsReclean, caseSoql } from "../lib/sync";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
@@ -418,6 +418,24 @@ console.log("syncHealth ignores scoped runs (IAI-398):");
       NOW,
     ).state === "never_run",
     "only scoped runs on record → cron has never run",
+  );
+}
+
+console.log("caseSoql shape — Merged exclusion (IAI-566):");
+{
+  const soql = caseSoql(["001U100000dqc5xIAA", "001U100000c1eVNIAY"]);
+  assert(soql.includes(`Status != 'Merged'`), "excludes merged duplicate shells at the source");
+  assert(
+    soql.includes(`'Technical Support'`) && soql.includes(`'Quickbooks Tech Support'`),
+    "both tech support types still queried",
+  );
+  assert(
+    soql.includes(`(IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`),
+    "30-day resolved window intact and parenthesized",
+  );
+  assert(
+    soql.includes(`'001U100000dqc5xIAA','001U100000c1eVNIAY'`),
+    "account ids quoted into the IN list",
   );
 }
 

@@ -33,14 +33,21 @@ function isSalesforceId(id: string): boolean {
  * introduces new ones. We pull each known account's full current open set (+ closed in the last
  * 30 days) every run rather than a LastModifiedDate delta — the known-account set is small under
  * event-only onboarding, and a delta would miss a newly-added account's older-but-still-open cases.
+ *
+ * Status = 'Merged' is excluded at the source (IAI-566, Tory's steer): a merged case is a
+ * duplicate shell whose content lives on in its parent case, so surfacing it as a "Resolved"
+ * ticket is noise. The `Merged → resolved` chip mapping stays in lib/status.ts as a safe default
+ * for any row that slips through.
+ *
+ * Exported for the SOQL-content tests in scripts/test-lib.ts.
  */
-function caseSoql(accountIds: string[]): string {
+export function caseSoql(accountIds: string[]): string {
   const ids = accountIds.map((id) => `'${id}'`).join(",");
   return (
     `SELECT Id, CaseNumber, Subject, Status, Type, CreatedDate, ClosedDate, LastModifiedDate, ` +
     `IsClosed, Resolution__c, AccountId, Account.Name, Account.ParentId ` +
     `FROM Case WHERE Type IN ${CASE_TYPES} AND AccountId IN (${ids}) ` +
-    `AND (IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`
+    `AND Status != 'Merged' AND (IsClosed = false OR ClosedDate = LAST_N_DAYS:30)`
   );
 }
 
