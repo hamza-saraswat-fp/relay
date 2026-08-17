@@ -124,9 +124,11 @@ export function refreshGate(
   return { state: "allowed" };
 }
 
-/** Org-wide ceiling on customer-triggered scoped syncs per rolling hour (IAI-398). Generous vs
- *  realistic usage, but bounds worst-case Bulk API load no matter how many accounts exist. */
-export const MAX_SCOPED_PER_HOUR = 60;
+/** Org-wide ceiling on scoped syncs per rolling hour (IAI-398). Generous vs realistic usage, but
+ *  bounds worst-case Bulk API load no matter how many accounts exist. Raised 60 → 150 for the
+ *  Flow update-trigger rollout (IAI-564): enabling it fires the backlog of typed-later cases in a
+ *  burst, and 150/hr is still trivial against the org's 10,000/day Bulk job ceiling. */
+export const MAX_SCOPED_PER_HOUR = 150;
 
 /**
  * Global safety valve: may ANY scoped refresh start right now? Pure. Counts scoped (non-'full')

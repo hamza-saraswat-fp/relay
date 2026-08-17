@@ -19,7 +19,7 @@ import {
   MAX_SCOPED_PER_HOUR,
   type SyncRunRow,
 } from "../lib/health";
-import { needsReclean, caseSoql } from "../lib/sync";
+import { needsReclean, caseSoql, SCOPED_POLL_BUDGET_MS } from "../lib/sync";
 import { cleanedOrFallback, fallbackFor } from "../lib/data";
 import {
   containsSensitive,
@@ -419,6 +419,16 @@ console.log("syncHealth ignores scoped runs (IAI-398):");
     ).state === "never_run",
     "only scoped runs on record → cron has never run",
   );
+}
+
+console.log("scoped poll budget (IAI-567):");
+{
+  // The budget is SHARED across the run's two sequential Bulk queries (an absolute deadline),
+  // so its single value must leave real headroom inside the 300s function maxDuration for the
+  // cleaning phase — the hard-kill at maxDuration is the failure mode this whole area exists
+  // to avoid (killed function → sync_runs row stuck at 'running').
+  assert(SCOPED_POLL_BUDGET_MS >= 120_000, "budget generously above the default 90s poll timeout");
+  assert(SCOPED_POLL_BUDGET_MS <= 240_000, "budget leaves ≥60s of the 300s maxDuration for cleaning");
 }
 
 console.log("caseSoql shape — Merged exclusion (IAI-566):");
