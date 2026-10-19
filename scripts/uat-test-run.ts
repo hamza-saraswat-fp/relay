@@ -310,6 +310,28 @@ async function main() {
       diagnosis: `status=${status} copy=${copy} (want 404 + "click the link again")` };
   });
 
+  await test("C7", "Page-view beacon records one internal view (needs migration 0004)", "page",
+    "POST /api/view with the session cookie → 204 + one new internal page_views row; without cookie → 404",
+    async () => {
+      const { data: acct } = await sb.from("accounts").select("id,token").eq("sf_account_id", KNOWN.ricks).maybeSingle();
+      const entry = await fetch(`${BASE}/t/${acct?.token}?internal=1`, { redirect: "manual" });
+      const cookie = (entry.headers.get("set-cookie") ?? "").split(";")[0];
+      const since = new Date().toISOString();
+      const ok = await fetch(`${BASE}/api/view`, {
+        method: "POST", headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ entry: "direct", internal: true }),
+      });
+      const noCookie = await fetch(`${BASE}/api/view`, {
+        method: "POST", body: JSON.stringify({ entry: "direct", internal: true }),
+      });
+      await new Promise((r) => setTimeout(r, 2000)); // insert runs after the response
+      const { data: rows } = await sb.from("page_views").select("internal,entry")
+        .eq("account_id", acct?.id).gte("viewed_at", since);
+      const pass = ok.status === 204 && noCookie.status === 404 && (rows ?? []).length === 1 && rows![0].internal === true;
+      return { actual: { withCookie: ok.status, withoutCookie: noCookie.status, newRows: rows }, pass,
+        diagnosis: `withCookie=${ok.status} withoutCookie=${noCookie.status} newRows=${JSON.stringify(rows)} (want 204/404/1 internal row)` };
+    });
+
   // ---------- Blocked (need Saffi / SF write) ----------
   blocked("A1", "Full Flow: case-create → link written to field", "Requires creating a Case in SF. Already proven once via the ivan358 test; re-run belongs to Saffi.");
   blocked("A3", "Write-if-empty: existing link not overwritten", "Flow write logic — needs a 2nd case on an already-linked account, created in SF by Saffi.");

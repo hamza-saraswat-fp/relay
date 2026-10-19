@@ -168,8 +168,29 @@ Events: `refresh_clicked` → `refresh_done|fresh|busy|slow|error`, `resolved_ex
 `support_email_clicked`.
 
 What Clarity can't tell you: how many of ALL links were ever opened. It counts browsers, not
-accounts, and its export API covers 3 days. For per-account coverage joined to Supabase, see the
-first-party page-view design in Linear IAI-465.
+accounts, and its export API covers 3 days. That number comes from first-party page views, below.
+
+### First-party page views and `/api/stats`
+
+Clarity counts browsers, not accounts, so the per-account number lives in our own Supabase:
+`page_views` (migration `0004`), one row per real page load of `/tracker`. A browser beacon
+(`app/tracker/ViewBeacon.tsx` → `POST /api/view`) records it, so email link scanners that follow the
+link without running JavaScript don't count; reloads (including the Refresh button) don't count
+either. The account comes only from the httpOnly session cookie. Stored per view: `account_id`,
+`viewed_at`, coarse `entry` (same rule as the Clarity tag), coarse `device`
+(`mobile`/`tablet`/`desktop`/`bot`/`unknown`, computed server-side), and `internal`. No IP, cookie id,
+or raw user agent. Production only (`RELAY_RECORD_VIEWS=1` turns it on locally for testing).
+
+Leadership numbers, from the `relay_usage_stats()` SQL function:
+
+```bash
+curl -s -H "x-relay-sync-key: $RELAY_SYNC_KEY" "https://mytickets.fieldpulse.com/api/stats?days=30"
+```
+
+Headline: `activeAccountsViewed / activeAccounts` (accounts with an open case whose page a customer
+opened in the window). Also `accountsEverViewed` (since `trackingSince`), `returningAccounts` (customer
+views on ≥2 distinct days), `customerViews`, `csViews`, `internalViews`, `deviceMix`. "Customer"
+excludes internal test visits, CS click-throughs from Salesforce, and bots.
 
 ## Deploy & operations
 

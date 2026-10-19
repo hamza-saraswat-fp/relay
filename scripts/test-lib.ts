@@ -32,6 +32,7 @@ import {
 import { cleanedOrFallback, fallbackFor, accountIdForToken } from "../lib/data";
 import { SEED_ACCOUNTS } from "../lib/seed";
 import { CLARITY_PROJECT_ID, bucket, entrySource, track } from "../app/tracker/analytics";
+import { ENTRY_VALUES, clampDays, deviceClass, parseViewBody, recordPageView } from "../lib/page-views";
 import {
   TRACKER_COOKIE,
   TRACKER_COOKIE_MAX_AGE_S,
@@ -753,8 +754,69 @@ console.log("Clarity analytics helpers (usage tracking):");
   assert(!threw, "track() is a no-op outside the browser (never throws)");
 }
 
+console.log("first-party page views (IAI-465 page-views slice):");
+{
+  const UA = {
+    iphone: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    android: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36",
+    ipad: "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+    androidTab: "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    mac: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    win: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 Edg/126.0",
+    googlebot: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    headless: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0 Safari/537.36",
+    safelinks: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Microsoft Office SafeLinks",
+    curl: "curl/8.7.1",
+  };
+  assert(deviceClass(UA.iphone) === "mobile", "iPhone → mobile");
+  assert(deviceClass(UA.android) === "mobile", "Android phone → mobile");
+  assert(deviceClass(UA.ipad) === "tablet", "iPad → tablet");
+  assert(deviceClass(UA.androidTab) === "tablet", "Android without 'Mobile' → tablet");
+  assert(deviceClass(UA.mac) === "desktop" && deviceClass(UA.win) === "desktop", "Mac/Windows Chrome → desktop");
+  assert(
+    [UA.googlebot, UA.headless, UA.safelinks, UA.curl].every((u) => deviceClass(u) === "bot"),
+    "Googlebot / HeadlessChrome / SafeLinks / curl → bot",
+  );
+  assert(deviceClass("") === "unknown" && deviceClass(null) === "unknown", "empty/missing UA → unknown");
+
+  assert(
+    ["", "https://x.lightning.force.com/", "https://mail.google.com/", "https://example.com/"]
+      .map(entrySource)
+      .every((e) => (ENTRY_VALUES as readonly string[]).includes(e)),
+    "every value the client's entrySource() can produce is accepted by the server allowlist",
+  );
+  assert(
+    JSON.stringify(parseViewBody({ entry: "direct", internal: false })) === JSON.stringify({ entry: "direct", internal: false }),
+    "valid beacon body → parsed",
+  );
+  assert(parseViewBody({ entry: "salesforce", internal: true })?.internal === true, "internal=true preserved");
+  assert(parseViewBody({ entry: "facebook", internal: false }) === null, "unknown entry → rejected");
+  assert(parseViewBody({ entry: "direct", internal: "yes" }) === null, "non-boolean internal → rejected");
+  assert(parseViewBody({ entry: "direct" }) === null, "missing internal → rejected");
+  assert(parseViewBody(null) === null && parseViewBody("x") === null && parseViewBody(42) === null, "garbage → rejected");
+  assert(
+    parseViewBody({ entry: "direct", internal: false, accountId: "someone-else" }) !== null &&
+      !("accountId" in (parseViewBody({ entry: "direct", internal: false, accountId: "x" }) ?? {})),
+    "extra fields (e.g. a smuggled accountId) are dropped, never passed through",
+  );
+
+  assert(clampDays(null) === 30 && clampDays("") === 30 && clampDays("abc") === 30, "days default 30");
+  assert(clampDays("7") === 7 && clampDays("0") === 1 && clampDays("-5") === 1 && clampDays("9999") === 365, "days clamped to 1..365");
+}
+
 /** fetchWithRetry is async, and this harness has no top-level await — run these in a wrapper. */
 async function asyncTests() {
+  console.log("recordPageView without Supabase:");
+  {
+    let threw = false;
+    try {
+      await recordPageView("acct-x", { entry: "direct", internal: false, device: "desktop" });
+    } catch {
+      threw = true;
+    }
+    assert(!threw, "no SUPABASE_URL → silent no-op, never throws");
+  }
+
   console.log("accountIdForToken in seed mode (no SUPABASE_URL):");
   {
     assert(!process.env.SUPABASE_URL, "harness runs without SUPABASE_URL (seed path)");

@@ -6,6 +6,7 @@ import { TRACKER_COOKIE, parseTrackerCookie } from "@/lib/tracker-session";
 import { type AccountView, type StatusChip, type Ticket } from "@/lib/types";
 import ClarityTracker from "./ClarityTracker";
 import RefreshButton from "./RefreshButton";
+import ViewBeacon from "./ViewBeacon";
 import styles from "./tracker.module.css";
 
 /**
@@ -19,6 +20,10 @@ import styles from "./tracker.module.css";
 export const dynamic = "force-dynamic";
 
 const ANALYTICS_ENABLED = process.env.VERCEL_ENV === "production";
+
+// First-party page views (ViewBeacon → /api/view → page_views). Production only, so previews never
+// write rows; RELAY_RECORD_VIEWS=1 exists solely to verify locally against a real database.
+const RECORD_VIEWS = ANALYTICS_ENABLED || process.env.RELAY_RECORD_VIEWS === "1";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -210,6 +215,7 @@ export default async function TrackerPage() {
           needsReply={needsResponse}
         />
       ) : null}
+      {RECORD_VIEWS ? <ViewBeacon /> : null}
     </main>
   );
 }
