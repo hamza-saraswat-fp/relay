@@ -10,9 +10,14 @@ const nextConfig: NextConfig = {
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
-        // The unguessable tracker URL is the only credential — don't leak it via the Referer header
-        // when a customer clicks an outbound link from the page.
+        // The unguessable tracker URL is the only credential — don't leak it via the Referer header.
+        // `/t/*` is now a 302 to `/tracker` (token lives in an httpOnly cookie), so the page itself
+        // carries no credential, but keep both covered: belt and braces for any outbound click.
         source: "/t/:path*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
+        source: "/tracker",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
     ];

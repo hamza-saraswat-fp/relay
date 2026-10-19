@@ -21,6 +21,8 @@ export interface Ticket {
 }
 
 export interface AccountView {
+  /** Supabase `accounts.id` — a join key safe to expose to client analytics. NOT the token. */
+  accountId: string;
   name: string;
   lastUpdatedISO: string;
   tickets: Ticket[];

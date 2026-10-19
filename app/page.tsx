@@ -1,4 +1,4 @@
-// Root page intentionally reveals nothing — customer pages live at /t/[token].
+// Root page intentionally reveals nothing — customers enter via /t/[token] and land on /tracker.
 export default function Home() {
   return (
     <main style={{ padding: "4rem 2rem", textAlign: "center", color: "#555" }}>

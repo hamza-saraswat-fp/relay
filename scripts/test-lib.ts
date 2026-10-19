@@ -29,7 +29,16 @@ import {
   RECONCILE_ABS_MAX,
   type ReconcileRow,
 } from "../lib/sync";
-import { cleanedOrFallback, fallbackFor } from "../lib/data";
+import { cleanedOrFallback, fallbackFor, accountIdForToken } from "../lib/data";
+import { SEED_ACCOUNTS } from "../lib/seed";
+import {
+  TRACKER_COOKIE,
+  TRACKER_COOKIE_MAX_AGE_S,
+  isUuid,
+  parseTrackerCookie,
+  trackerCookieAttrs,
+  trackerCookieClearAttrs,
+} from "../lib/tracker-session";
 import {
   containsSensitive,
   containsBannedCta,
@@ -685,8 +694,53 @@ console.log("retry decisions (IAI-460):");
   assert(backoffMs(1, 100) === 8000, "absurd Retry-After is clamped to the cap");
 }
 
+console.log("tracker session cookie (token out of the URL):");
+{
+  const TOK = "11111111-1111-4111-8111-111111111111";
+
+  assert(isUuid(TOK), "well-formed uuid → isUuid");
+  assert(isUuid("00000000-0000-0000-0000-000000000000"), "nil uuid is well-formed (lookup decides)");
+  assert(!isUuid("not-a-token") && !isUuid("") && !isUuid(undefined) && !isUuid(42), "garbage/empty/non-string → not uuid");
+
+  assert(parseTrackerCookie(undefined) === null, "missing cookie → null");
+  assert(parseTrackerCookie("") === null, "empty cookie → null");
+  assert(parseTrackerCookie("not-a-uuid") === null, "garbage cookie → null");
+  assert(parseTrackerCookie(` ${TOK} `) === null, "no trimming leniency — padded value → null");
+  assert(parseTrackerCookie(TOK) === TOK, "valid cookie → token");
+  assert(parseTrackerCookie(TOK.toUpperCase()) === TOK, "uppercase cookie → lowercased token");
+
+  const prod = trackerCookieAttrs(TOK, { production: true });
+  assert(prod.name === TRACKER_COOKIE && prod.value === TOK, "attrs carry the cookie name + token");
+  assert(prod.httpOnly === true, "httpOnly — browser JS never sees the token");
+  assert(prod.sameSite === "lax", "SameSite=Lax — survives the cross-site click from an email client");
+  assert(prod.path === "/", "path=/ — sent to /tracker and /api/refresh");
+  assert(prod.secure === true, "secure in production");
+  assert(prod.maxAge === TRACKER_COOKIE_MAX_AGE_S && prod.maxAge === 31_536_000, "one-year max-age");
+  assert(trackerCookieAttrs(TOK, { production: false }).secure === false, "not secure under next dev (plain http)");
+
+  const clear = trackerCookieClearAttrs({ production: true });
+  assert(clear.name === TRACKER_COOKIE && clear.path === "/", "clear attrs keep name + path (or the clear fails)");
+  assert(clear.value === "" && clear.maxAge === 0, "clear attrs: empty value, maxAge 0");
+
+  const seeds = Object.entries(SEED_ACCOUNTS);
+  assert(seeds.every(([, a]) => typeof a.accountId === "string" && a.accountId.length > 0), "every seed has an accountId");
+  assert(new Set(seeds.map(([, a]) => a.accountId)).size === seeds.length, "seed accountIds are distinct");
+  assert(seeds.every(([tok, a]) => a.accountId !== tok), "seed accountId is never the token");
+}
+
 /** fetchWithRetry is async, and this harness has no top-level await — run these in a wrapper. */
 async function asyncTests() {
+  console.log("accountIdForToken in seed mode (no SUPABASE_URL):");
+  {
+    assert(!process.env.SUPABASE_URL, "harness runs without SUPABASE_URL (seed path)");
+    assert(
+      (await accountIdForToken("11111111-1111-4111-8111-111111111111")) === "seed-bluebird",
+      "known seed token → its accountId",
+    );
+    assert((await accountIdForToken("00000000-0000-0000-0000-000000000000")) === null, "unknown uuid → null");
+    assert((await accountIdForToken("garbage")) === null, "garbage → null");
+  }
+
   console.log("fetchWithRetry (IAI-460):");
   const noSleep = async () => {};
   const ok = () => new Response("ok", { status: 200 });

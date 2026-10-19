@@ -10,6 +10,9 @@ import styles from "./tracker.module.css";
  * A sync takes ~4 minutes, so the endpoint starts it in the background and we poll until a run
  * that began after this click has finished, then reload to show the fresh data. Every non-started
  * outcome is phrased as reassurance ("Already up to date"), never as an error.
+ *
+ * The browser never holds the page token: `/api/refresh` identifies the account from the httpOnly
+ * session cookie that `/t/[token]` set, which same-origin `fetch` sends automatically.
  */
 
 const POLL_MS = 12_000;
@@ -26,7 +29,7 @@ const MESSAGE: Partial<Record<Phase, string>> = {
   error: "Couldn't refresh. Try again shortly.",
 };
 
-export default function RefreshButton({ token }: { token: string }) {
+export default function RefreshButton() {
   const [phase, setPhase] = useState<Phase>("idle");
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -36,53 +39,44 @@ export default function RefreshButton({ token }: { token: string }) {
     return () => pending.forEach(clearTimeout);
   }, []);
 
-  const poll = useCallback(
-    (clickedAtMs: number) => {
-      const deadline = Date.now() + GIVE_UP_MS;
+  const poll = useCallback((clickedAtMs: number) => {
+    const deadline = Date.now() + GIVE_UP_MS;
 
-      const tick = async () => {
-        if (Date.now() > deadline) {
-          setPhase("slow");
-          return;
-        }
-        try {
-          const res = await fetch(`/api/refresh?token=${encodeURIComponent(token)}`, {
-            cache: "no-store",
-          });
-          if (res.ok) {
-            const run = (await res.json()) as {
-              startedAt: string | null;
-              finishedAt: string | null;
-            };
-            // Only a run that began after the click can reflect this refresh.
-            const startedAfterClick =
-              run.startedAt !== null && new Date(run.startedAt).getTime() >= clickedAtMs - 2000;
-            if (startedAfterClick && run.finishedAt) {
-              setPhase("done");
-              window.location.reload();
-              return;
-            }
+    const tick = async () => {
+      if (Date.now() > deadline) {
+        setPhase("slow");
+        return;
+      }
+      try {
+        const res = await fetch("/api/refresh", { cache: "no-store" });
+        if (res.ok) {
+          const run = (await res.json()) as {
+            startedAt: string | null;
+            finishedAt: string | null;
+          };
+          // Only a run that began after the click can reflect this refresh.
+          const startedAfterClick =
+            run.startedAt !== null && new Date(run.startedAt).getTime() >= clickedAtMs - 2000;
+          if (startedAfterClick && run.finishedAt) {
+            setPhase("done");
+            window.location.reload();
+            return;
           }
-        } catch {
-          // Transient network blip — keep polling until the deadline.
         }
-        timers.current.push(setTimeout(tick, POLL_MS));
-      };
-
+      } catch {
+        // Transient network blip — keep polling until the deadline.
+      }
       timers.current.push(setTimeout(tick, POLL_MS));
-    },
-    [token],
-  );
+    };
+
+    timers.current.push(setTimeout(tick, POLL_MS));
+  }, []);
 
   const onClick = useCallback(async () => {
     setPhase("starting");
     const clickedAtMs = Date.now();
     try {
-      const res = await fetch("/api/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
+      const res = await fetch("/api/refresh", { method: "POST" });
       if (!res.ok) {
         setPhase("error");
         return;
@@ -98,7 +92,7 @@ export default function RefreshButton({ token }: { token: string }) {
     } catch {
       setPhase("error");
     }
-  }, [token, poll]);
+  }, [poll]);
 
   const busy = phase === "starting" || phase === "refreshing" || phase === "done";
 

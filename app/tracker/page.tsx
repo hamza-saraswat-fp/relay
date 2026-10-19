@@ -1,14 +1,18 @@
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactElement } from "react";
 import { getAccountView } from "@/lib/data";
+import { TRACKER_COOKIE, parseTrackerCookie } from "@/lib/tracker-session";
 import { type AccountView, type StatusChip, type Ticket } from "@/lib/types";
 import RefreshButton from "./RefreshButton";
 import styles from "./tracker.module.css";
 
+/**
+ * The customer status page. Reached only via the permanent link `/t/{token}`, whose route handler
+ * stores the token in an httpOnly cookie and redirects here — so this URL carries no credential.
+ * No cookie (cleared, expired, bookmarked directly) → `not-found.tsx` tells them to re-click the link.
+ */
 export const dynamic = "force-dynamic";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -78,13 +82,9 @@ const STATUS: Record<StatusChip, { label: string; cls: string; Icon: () => React
   resolved: { label: "Resolved", cls: "chip_resolved", Icon: IconCheck },
 };
 
-export default async function TrackerPage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
-  const { token } = await params;
-  if (!UUID_RE.test(token)) notFound();
+export default async function TrackerPage() {
+  const token = parseTrackerCookie((await cookies()).get(TRACKER_COOKIE)?.value);
+  if (!token) notFound();
 
   let account: AccountView | null = null;
   try {
@@ -156,7 +156,7 @@ export default async function TrackerPage({
           <span className={styles.secC}>{open.length} active</span>
           <span className={styles.rule} />
           {/* Live data only — in seed/offline mode there is nothing to refresh. */}
-          {process.env.SUPABASE_URL ? <RefreshButton token={token} /> : null}
+          {process.env.SUPABASE_URL ? <RefreshButton /> : null}
         </div>
 
         {open.length === 0 ? (
