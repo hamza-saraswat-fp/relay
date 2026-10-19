@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { getAccountView } from "@/lib/data";
 import { TRACKER_COOKIE, parseTrackerCookie } from "@/lib/tracker-session";
 import { type AccountView, type StatusChip, type Ticket } from "@/lib/types";
+import ClarityTracker from "./ClarityTracker";
 import RefreshButton from "./RefreshButton";
 import styles from "./tracker.module.css";
 
@@ -11,8 +12,13 @@ import styles from "./tracker.module.css";
  * The customer status page. Reached only via the permanent link `/t/{token}`, whose route handler
  * stores the token in an httpOnly cookie and redirects here — so this URL carries no credential.
  * No cookie (cleared, expired, bookmarked directly) → `not-found.tsx` tells them to re-click the link.
+ *
+ * Usage analytics (Microsoft Clarity) load only in production — decided here, server-side, so
+ * previews and local dev never ship the script. Customer content carries `data-clarity-mask`.
  */
 export const dynamic = "force-dynamic";
+
+const ANALYTICS_ENABLED = process.env.VERCEL_ENV === "production";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -118,7 +124,7 @@ export default async function TrackerPage() {
 
         <section className={styles.hero}>
           <div>
-            <h1 className={styles.h1}>{account.name}</h1>
+            <h1 className={styles.h1} data-clarity-mask="true">{account.name}</h1>
             <p className={styles.lede}>
               Where every open ticket stands, updated live from our support team.
             </p>
@@ -166,7 +172,7 @@ export default async function TrackerPage() {
         )}
 
         {resolved.length > 0 && (
-          <details className={styles.rez}>
+          <details className={styles.rez} data-track="resolved">
             <summary>
               <IconChevron />
               Recently resolved
@@ -177,7 +183,7 @@ export default async function TrackerPage() {
             {resolved.map((t, i) => (
               <div className={styles.rzItem} key={`res-${i}`}>
                 <span className={styles.ck} aria-hidden>✓</span>
-                <span className={styles.rzTitle}>{t.subject}</span>
+                <span className={styles.rzTitle} data-clarity-mask="true">{t.subject}</span>
                 <span className={styles.rzDate}>
                   {t.resolvedDateISO ? `Resolved ${fmtDate(t.resolvedDateISO)}` : "Resolved"}
                 </span>
@@ -188,14 +194,22 @@ export default async function TrackerPage() {
 
         <footer className={styles.footer}>
           <b>Need something that isn&apos;t listed here?</b> Email{" "}
-          <a href="mailto:support@fieldpulse.com">support@fieldpulse.com</a> and our support team
-          will pick it up from there.
+          <a href="mailto:support@fieldpulse.com" data-track="support_email">support@fieldpulse.com</a>{" "}
+          and our support team will pick it up from there.
           <div className={styles.fine}>
             This page is read-only and reflects your tickets in FieldPulse&apos;s support system.
-            The link is private to your account.
+            The link is private to your account. We use Microsoft Clarity to understand how this
+            page is used so we can improve it.
           </div>
         </footer>
       </div>
+      {ANALYTICS_ENABLED ? (
+        <ClarityTracker
+          accountId={account.accountId}
+          openTickets={open.length}
+          needsReply={needsResponse}
+        />
+      ) : null}
     </main>
   );
 }
@@ -210,13 +224,13 @@ function TicketCard({ t }: { t: Ticket }) {
           <status.Icon />
           {status.label}
         </span>
-        <h3 className={styles.subject}>{t.subject}</h3>
+        <h3 className={styles.subject} data-clarity-mask="true">{t.subject}</h3>
         <div className={styles.meta}>
           <span>Opened <b>{fmtDate(t.openedISO)}</b></span>
           <span>Updated <b>{fmtDate(t.lastActivityISO)}</b></span>
         </div>
       </div>
-      <div className={styles.update}>
+      <div className={styles.update} data-clarity-mask="true">
         <div className={styles.updLabel}>Latest update</div>
         <p>{t.latestUpdate}</p>
       </div>

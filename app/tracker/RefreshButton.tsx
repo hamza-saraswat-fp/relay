@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { track } from "./analytics";
 import styles from "./tracker.module.css";
 
 /**
@@ -45,6 +46,7 @@ export default function RefreshButton() {
     const tick = async () => {
       if (Date.now() > deadline) {
         setPhase("slow");
+        track("refresh_slow");
         return;
       }
       try {
@@ -59,6 +61,7 @@ export default function RefreshButton() {
             run.startedAt !== null && new Date(run.startedAt).getTime() >= clickedAtMs - 2000;
           if (startedAfterClick && run.finishedAt) {
             setPhase("done");
+            track("refresh_done");
             window.location.reload();
             return;
           }
@@ -74,11 +77,13 @@ export default function RefreshButton() {
 
   const onClick = useCallback(async () => {
     setPhase("starting");
+    track("refresh_clicked");
     const clickedAtMs = Date.now();
     try {
       const res = await fetch("/api/refresh", { method: "POST" });
       if (!res.ok) {
         setPhase("error");
+        track("refresh_error");
         return;
       }
       const { state } = (await res.json()) as { state: string };
@@ -88,9 +93,12 @@ export default function RefreshButton() {
         return;
       }
       // 'fresh' — synced recently, already current. 'busy' — global safety valve engaged.
-      setPhase(state === "busy" ? "busy" : "fresh");
+      const outcome = state === "busy" ? "busy" : "fresh";
+      setPhase(outcome);
+      track(`refresh_${outcome}`);
     } catch {
       setPhase("error");
+      track("refresh_error");
     }
   }, [poll]);
 
