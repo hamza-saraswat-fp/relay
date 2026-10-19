@@ -19,20 +19,27 @@ import { isUuid, trackerCookieAttrs, trackerCookieClearAttrs } from "@/lib/track
  */
 export const dynamic = "force-dynamic";
 
-function redirectToTracker(): NextResponse {
+/**
+ * `?internal=1` is the one query flag forwarded through the redirect: our own test visits carry it
+ * so analytics can tag them as internal. Nothing else from the entry URL is propagated.
+ */
+function redirectToTracker(internal: boolean): NextResponse {
   return new NextResponse(null, {
     status: 302,
-    headers: { Location: "/tracker", "Cache-Control": "private, no-store" },
+    headers: {
+      Location: internal ? "/tracker?internal=1" : "/tracker",
+      "Cache-Control": "private, no-store",
+    },
   });
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ token: string }> },
 ): Promise<NextResponse> {
   const { token } = await ctx.params;
   const production = process.env.NODE_ENV === "production";
-  const res = redirectToTracker();
+  const res = redirectToTracker(req.nextUrl.searchParams.get("internal") === "1");
 
   let known = false;
   if (isUuid(token)) {
