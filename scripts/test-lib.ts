@@ -31,6 +31,7 @@ import {
 } from "../lib/sync";
 import { cleanedOrFallback, fallbackFor, accountIdForToken } from "../lib/data";
 import { SEED_ACCOUNTS } from "../lib/seed";
+import { CLARITY_PROJECT_ID, bucket, entrySource, track } from "../app/tracker/analytics";
 import {
   TRACKER_COOKIE,
   TRACKER_COOKIE_MAX_AGE_S,
@@ -726,6 +727,30 @@ console.log("tracker session cookie (token out of the URL):");
   assert(seeds.every(([, a]) => typeof a.accountId === "string" && a.accountId.length > 0), "every seed has an accountId");
   assert(new Set(seeds.map(([, a]) => a.accountId)).size === seeds.length, "seed accountIds are distinct");
   assert(seeds.every(([tok, a]) => a.accountId !== tok), "seed accountId is never the token");
+}
+
+console.log("Clarity analytics helpers (usage tracking):");
+{
+  assert(/^[a-z0-9]{10}$/.test(CLARITY_PROJECT_ID), "project id has Clarity's 10-char shape");
+
+  assert(entrySource("") === "direct", "no referrer (most email clients) → direct");
+  assert(entrySource("https://fieldpulse.lightning.force.com/lightning/r/Account/001x/view") === "salesforce", "Lightning Account page → salesforce");
+  assert(entrySource("https://login.salesforce.com/") === "salesforce", "salesforce.com → salesforce");
+  assert(entrySource("https://mail.google.com/mail/u/0/") === "webmail", "Gmail → webmail");
+  assert(entrySource("https://outlook.office.com/mail/") === "webmail", "Outlook web → webmail");
+  assert(entrySource("https://www.fieldpulse.com/help") === "other", "anything else → other");
+  assert(entrySource("https://notsalesforce.com/") === "other", "'salesforce' must be a real domain label, not a substring");
+
+  assert(bucket(0) === "0" && bucket(1) === "1-2" && bucket(2) === "1-2", "bucket low counts");
+  assert(bucket(3) === "3-5" && bucket(5) === "3-5" && bucket(6) === "6+" && bucket(40) === "6+", "bucket high counts");
+
+  let threw = false;
+  try {
+    track("anything"); // no window in this harness → must be a silent no-op
+  } catch {
+    threw = true;
+  }
+  assert(!threw, "track() is a no-op outside the browser (never throws)");
 }
 
 /** fetchWithRetry is async, and this harness has no top-level await — run these in a wrapper. */

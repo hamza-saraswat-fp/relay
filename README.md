@@ -148,6 +148,29 @@ npm run eval:cleaner   # cleaner golden set — needs OPENROUTER_API_KEY; safety
 npm run typecheck
 ```
 
+## Usage analytics (Microsoft Clarity)
+
+The customer page loads [Microsoft Clarity](https://clarity.microsoft.com/projects/view/z07u6fm8le)
+**in production only** (`VERCEL_ENV === "production"`, decided server-side in `app/tracker/page.tsx`),
+so previews and local dev never send anything. The project id is a public constant in
+`app/tracker/analytics.ts`; there is no env var.
+
+Why it is safe on a credential-bearing product: the page URL is `/tracker` (the token lives in an
+httpOnly cookie, see `lib/tracker-session.ts`), sessions are tagged with Supabase `accounts.id`
+(never the token), and customer content — account name, ticket subjects, update text — carries
+`data-clarity-mask`, so recordings show *how the page is used*, not what the tickets say.
+
+Session tags (filterable in Clarity): `account` (Supabase id), `entry` (`salesforce` when a CS
+agent clicks through from the Account record, `webmail`, `direct`, `other`), `open_tickets`
+(bucketed), `needs_reply`, and `internal=yes` when the link is opened with `?internal=1` (use this
+for all our own testing — the "Customers" segment is `entry != salesforce AND internal != yes`).
+Events: `refresh_clicked` → `refresh_done|fresh|busy|slow|error`, `resolved_expanded`,
+`support_email_clicked`.
+
+What Clarity can't tell you: how many of ALL links were ever opened. It counts browsers, not
+accounts, and its export API covers 3 days. For per-account coverage joined to Supabase, see the
+first-party page-view design in Linear IAI-465.
+
 ## Deploy & operations
 
 **Vercel:** root directory `./`, Next.js preset, all env vars above set. The cron registers
