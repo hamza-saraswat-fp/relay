@@ -20,7 +20,7 @@ flowchart LR
   subgraph V["Relay app (Vercel)"]
     B["/api/salesforce/case-created"]
     E["/api/sync — cron every 6 h"]
-    P["/t/{token} page (SSR)"]
+    P["/t/{token} → cookie → /tracker (SSR)"]
   end
   subgraph DB["Supabase"]
     T[(accounts · token)]
@@ -48,9 +48,14 @@ download CSV — deliberately off the org's strained REST quota), runs each upda
 Sonnet 5 clean + public-safety pass (via OpenRouter), and upserts into Supabase. It only queries
 cases for accounts already tracked.
 
-**3 · Customer visit.** `/t/{token}` renders server-side from **Supabase only** — Salesforce is
-never touched at page load, so pages are fast, put zero load on the SF org, and survive an SF
-outage. Unknown token → 404 (fails closed).
+**3 · Customer visit.** `/t/{token}` is an **entry point only**: a route handler validates the
+token, stores it in an httpOnly `relay_tracker` cookie, and 302s to `/tracker`, which renders
+server-side from **Supabase only** — Salesforce is never touched at page load, so pages are fast,
+put zero load on the SF org, and survive an SF outage. The credential therefore never sits in the
+address bar, browser history, client JS, or any analytics payload. Unknown token → the redirect
+clears the cookie and `/tracker` fails closed with a branded 404 ("click the link again"); so does
+`/tracker` opened directly or after the cookie is cleared. Two links opened in one browser: last
+one wins.
 
 ## Scope invariants — do not relitigate these
 
@@ -65,7 +70,9 @@ outage. Unknown token → 404 (fails closed).
 
 | Path | What it is |
 |---|---|
-| `app/t/[token]/page.tsx` | The customer status page (SSR, Supabase-only reads, 404 on bad token) |
+| `app/t/[token]/route.ts` | Permanent-link entry point: validate token → httpOnly cookie → 302 `/tracker` (clears the cookie on a bad token) |
+| `app/tracker/page.tsx` | The customer status page (SSR from the cookie, Supabase-only reads, 404 without a valid cookie) |
+| `lib/tracker-session.ts` | Cookie name/attrs + token parsing (pure; covered by `test:lib`) |
 | `app/api/sync/route.ts` | Sync trigger — GET (cron) + POST (manual, 10-min cooldown) |
 | `app/api/salesforce/case-created/route.ts` | New-case webhook: upsert account, mint token, return link |
 | `lib/salesforce.ts` | Bulk API 2.0 client: OAuth client-credentials, job → poll → CSV, RFC-4180 parser |

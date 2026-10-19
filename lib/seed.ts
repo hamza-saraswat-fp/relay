@@ -9,6 +9,7 @@ import type { AccountView } from "./types";
 export const SEED_ACCOUNTS: Record<string, AccountView> = {
   // Bluebird Plumbing & Air — the account from the approved mock.
   "11111111-1111-4111-8111-111111111111": {
+    accountId: "seed-bluebird",
     name: "Bluebird Plumbing & Air",
     lastUpdatedISO: "2026-06-12T12:00:00Z",
     tickets: [
@@ -76,6 +77,7 @@ export const SEED_ACCOUNTS: Record<string, AccountView> = {
 
   // A second, lighter account — one open ticket waiting on support, no resolved items.
   "22222222-2222-4222-8222-222222222222": {
+    accountId: "seed-cedar-ridge",
     name: "Cedar Ridge Electric",
     lastUpdatedISO: "2026-06-12T12:00:00Z",
     tickets: [

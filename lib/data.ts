@@ -1,5 +1,6 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
+import { UUID_RE } from "./tracker-session";
 import { SAFE_FALLBACK } from "./update-cleaner";
 
 /**
@@ -14,6 +15,23 @@ export async function getAccountView(token: string): Promise<AccountView | null>
     return getAccountViewFromSupabase(token);
   }
   return SEED_ACCOUNTS[token] ?? null;
+}
+
+/**
+ * Resolve a page token to the tracked account's id, or null for anything unrecognized.
+ * Shared by the `/t/[token]` entry route and `/api/refresh`. Seed-aware like `getAccountView`.
+ */
+export async function accountIdForToken(token: string): Promise<string | null> {
+  if (!UUID_RE.test(token)) return null;
+  if (!process.env.SUPABASE_URL) return SEED_ACCOUNTS[token]?.accountId ?? null;
+  const { getServiceClient } = await import("./supabase");
+  const { data, error } = await getServiceClient()
+    .from("accounts")
+    .select("id")
+    .eq("token", token)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.id as string;
 }
 
 async function getAccountViewFromSupabase(
@@ -52,6 +70,7 @@ async function getAccountViewFromSupabase(
   });
 
   return {
+    accountId: account.id as string,
     name: account.name as string,
     lastUpdatedISO: account.updated_at as string,
     tickets,

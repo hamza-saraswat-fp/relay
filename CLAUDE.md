@@ -11,7 +11,7 @@ automatically, so a merged PR is a production deploy.
 ## Brand & design system
 
 FieldPulse brand tokens and UI conventions for the customer-facing tracker
-(`app/t/[token]`) are documented in `docs/brand-guidelines.md` (rules) and
+(`app/tracker`, entered via the `/t/[token]` redirect) are documented in `docs/brand-guidelines.md` (rules) and
 `app/brand.css` (tokens), with a rendered reference at `design/ui-kit.html`.
 Follow these for any UI work rather than introducing new colors, fonts, or
 status semantics ad hoc. Explored-but-not-all-shipped full-page directions

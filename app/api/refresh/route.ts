@@ -1,13 +1,16 @@
 import { type NextRequest, NextResponse, after } from "next/server";
 import { runSync } from "@/lib/sync";
+import { accountIdForToken } from "@/lib/data";
 import { getServiceClient } from "@/lib/supabase";
 import { refreshGate, scopedRefreshAllowed, type SyncRunRow } from "@/lib/health";
+import { TRACKER_COOKIE, parseTrackerCookie } from "@/lib/tracker-session";
 
 /**
  * Customer-facing "Refresh" endpoint (IAI-396, per-account scoping IAI-398).
  *
- * Auth is the page token itself — the unguessable UUID is the capability credential, exactly like
- * the page it's clicked from. (The internal manual refresh, `POST /api/sync`, authenticates with
+ * Auth is the httpOnly tracker cookie minted by `/t/[token]` — the page token never reaches
+ * browser JS, so the request carries no body and no query string; same-origin `fetch` sends the
+ * cookie implicitly. (The internal manual refresh, `POST /api/sync`, authenticates with
  * RELAY_SYNC_KEY, a secret that must never reach a browser.)
  *
  * A click syncs ONLY that account (Salesforce → Supabase), then the client polls GET until the
@@ -21,24 +24,15 @@ import { refreshGate, scopedRefreshAllowed, type SyncRunRow } from "@/lib/health
  */
 export const maxDuration = 300;
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function notFound() {
   // Deliberately generic: never confirm whether a token exists, never log the token itself.
   return NextResponse.json({ error: "not found" }, { status: 404 });
 }
 
-/** Resolve a page token to the tracked account's id, or null for anything unrecognized. */
-async function accountIdForToken(token: unknown): Promise<string | null> {
-  if (typeof token !== "string" || !UUID_RE.test(token)) return null;
-  const supabase = getServiceClient();
-  const { data, error } = await supabase
-    .from("accounts")
-    .select("id")
-    .eq("token", token)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data.id as string;
+/** Resolve the caller's account from the httpOnly tracker cookie, or null for anything else. */
+async function accountIdFromRequest(req: NextRequest): Promise<string | null> {
+  const token = parseTrackerCookie(req.cookies.get(TRACKER_COOKIE)?.value);
+  return token ? accountIdForToken(token) : null;
 }
 
 /** Recent runs, newest first — enough rows to cover the 1-hour safety-valve window. */
@@ -53,13 +47,9 @@ async function recentRuns(): Promise<SyncRunRow[]> {
 }
 
 export async function POST(req: NextRequest) {
-  let token: unknown;
-  try {
-    token = (await req.json())?.token;
-  } catch {
-    return notFound();
-  }
-  const accountId = await accountIdForToken(token);
+  // The body is deliberately ignored: a tab rendered before this deploy may still POST `{token}`,
+  // and keeping a body-token path would keep the credential in the client contract.
+  const accountId = await accountIdFromRequest(req);
   if (!accountId) return notFound();
 
   const runs = await recentRuns();
@@ -95,7 +85,7 @@ export async function POST(req: NextRequest) {
 /** Poll target for the button: the newest run COVERING this account (its own scoped refreshes or
  *  a full sync), so the client reloads on ITS refresh — never on some other account's. */
 export async function GET(req: NextRequest) {
-  const accountId = await accountIdForToken(req.nextUrl.searchParams.get("token"));
+  const accountId = await accountIdFromRequest(req);
   if (!accountId) return notFound();
 
   const covering = (await recentRuns()).filter(
