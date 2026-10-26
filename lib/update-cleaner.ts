@@ -1,11 +1,11 @@
-import { requireEnv } from "./env";
+import { GATEWAY_URL, gatewayAuth } from "./gateway";
 import type { StatusChip } from "./types";
 
 /**
  * Turn a support agent's raw outbound email into a short, customer-facing status update for the
  * PUBLIC ticket page — with layered guardrails. IAI-214 / IAI-239 / IAI-316 / IAI-317 (prompt v4).
  *
- * Model: Claude Sonnet 5 via OpenRouter. The prompt writes in an implementation-specialist voice,
+ * Model: Claude Sonnet 5 via the Vercel AI Gateway (lib/gateway.ts). The prompt writes in an implementation-specialist voice,
  * bans internal vocabulary, and is given the ticket's current status + subject + type + email age so
  * the update never contradicts the status chip shown next to it. Context is for tone/consistency
  * only — it is never quoted back to the customer, and only non-sensitive fields are ever passed in.
@@ -22,7 +22,6 @@ import type { StatusChip } from "./types";
  */
 
 const MODEL = "anthropic/claude-sonnet-5";
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const SAFE_FALLBACK =
   "Our team posted an update on this ticket. Check your email thread for details.";
@@ -213,7 +212,7 @@ export async function verifyFaithful(
   cleaned: string,
   ctx?: CleanContext,
 ): Promise<{ pass: boolean; reason: string }> {
-  const apiKey = requireEnv("OPENROUTER_API_KEY");
+  const apiKey = await gatewayAuth();
   const ctxLines: string[] = [];
   if (ctx?.subject) ctxLines.push(`Ticket subject: ${ctx.subject}`);
   if (ctx?.statusChip) ctxLines.push(`Current ticket status: ${STATUS_DESC[ctx.statusChip]}`);
@@ -221,7 +220,7 @@ export async function verifyFaithful(
   const payload = `${context}SOURCE EMAIL:\n${source}\n\nUPDATE TO JUDGE:\n${cleaned}`;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(OPENROUTER_URL, {
+      const res = await fetch(GATEWAY_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -276,11 +275,11 @@ export async function cleanUpdate(rawEmail: string, ctx?: CleanContext): Promise
   }
 
   // Throws if unconfigured — a real misconfig should surface, not silently fall back.
-  const apiKey = requireEnv("OPENROUTER_API_KEY");
+  const apiKey = await gatewayAuth();
 
   let res: Response;
   try {
-    res = await fetch(OPENROUTER_URL, {
+    res = await fetch(GATEWAY_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -9,11 +9,12 @@
  * that must be right). Voice/consistency judge failures and over-flags are surfaced as REVIEW items,
  * not hard failures (judge noise shouldn't break CI). Writes docs/relay-cleaner-eval-<date>.md.
  *
- * Run: OPENROUTER_API_KEY=... npm run eval:cleaner
+ * Run: npm run eval:cleaner with VERCEL_OIDC_TOKEN (from `vercel env pull`) or AI_GATEWAY_API_KEY set
  */
 import fs from "node:fs";
 import path from "node:path";
 import { cleanUpdate, verifyFaithful, SAFE_FALLBACK, type CleanResult } from "../lib/update-cleaner";
+import { GATEWAY_URL, gatewayAuth } from "../lib/gateway";
 import { EMAIL_FIXTURES, type EmailFixture } from "../lib/fixtures/emails";
 
 /**
@@ -80,7 +81,6 @@ const GATE_SELF_TESTS: {
 interface GateResult { label: string; expectPass: boolean; got: boolean; reason: string; correct: boolean }
 
 const MODEL = "anthropic/claude-sonnet-5";
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const STATUS_DESC: Record<string, string> = {
   waiting_for_you: "Waiting on the customer to reply",
   waiting_for_support: "In our support queue (received, not yet actively worked)",
@@ -91,9 +91,9 @@ const STATUS_DESC: Record<string, string> = {
 interface Verdict { pass: boolean; reason: string; inconclusive?: boolean }
 async function judgeOnce(system: string, payload: string): Promise<Verdict | null> {
   try {
-    const res = await fetch(OPENROUTER_URL, {
+    const res = await fetch(GATEWAY_URL, {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, "Content-Type": "application/json", "X-Title": "Relay-eval" },
+      headers: { Authorization: `Bearer ${await gatewayAuth()}`, "Content-Type": "application/json", "X-Title": "Relay-eval" },
       body: JSON.stringify({ model: MODEL, temperature: 0, max_tokens: 400,
         messages: [{ role: "system", content: system }, { role: "user", content: payload }] }),
     });
@@ -142,8 +142,10 @@ function deterministic(fx: EmailFixture, r: CleanResult): { hard: string[]; warn
 }
 
 async function main() {
-  if (!process.env.OPENROUTER_API_KEY) {
-    console.error("OPENROUTER_API_KEY not set — cannot run the eval. Aborting.");
+  try {
+    await gatewayAuth();
+  } catch {
+    console.error("No AI Gateway credential (VERCEL_OIDC_TOKEN or AI_GATEWAY_API_KEY) — cannot run the eval. Aborting.");
     process.exit(1);
   }
   const rows: Row[] = [];
