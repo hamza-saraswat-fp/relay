@@ -30,7 +30,7 @@ flowchart LR
   B -- mint token --> T
   B -. "tracker URL returned" .-> F
   D -- "2 · Bulk API 2.0 pull" --> E
-  E -- "clean via Sonnet 5 (OpenRouter)" --> C
+  E -- "clean via Sonnet 5 (AI Gateway)" --> C
   U[Customer browser] -- "3 · opens link" --> P
   P -- read-only --> T
   P -- read-only --> C
@@ -45,7 +45,7 @@ Account. This is the **only** way an account enters Relay.
 **2 · Data refresh (pull, every 6 h).** Vercel Cron calls `/api/sync`, which pulls case statuses +
 each case's newest outbound email via **Salesforce Bulk API 2.0** (submit query job → poll →
 download CSV — deliberately off the org's strained REST quota), runs each update through a Claude
-Sonnet 5 clean + public-safety pass (via OpenRouter), and upserts into Supabase. It only queries
+Sonnet 5 clean + public-safety pass (via the Vercel AI Gateway), and upserts into Supabase. It only queries
 cases for accounts already tracked.
 
 **3 · Customer visit.** `/t/{token}` is an **entry point only**: a route handler validates the
@@ -78,7 +78,7 @@ one wins.
 | `lib/salesforce.ts` | Bulk API 2.0 client: OAuth client-credentials, job → poll → CSV, RFC-4180 parser |
 | `lib/sync.ts` | Sync orchestration: known-accounts scope, status mapping, clean, upsert |
 | `lib/status.ts` | Raw `Case.Status` → customer chip mapping |
-| `lib/update-cleaner.ts` | Sonnet 5 clean + safety pass (OpenRouter); exports the safe fallback line |
+| `lib/update-cleaner.ts` | Sonnet 5 clean + safety pass (Vercel AI Gateway); exports the safe fallback line |
 | `lib/data.ts` / `lib/supabase.ts` / `lib/env.ts` | Page data loader · service-role client · fail-fast env access |
 | `lib/seed.ts` · `lib/fixtures/emails.ts` | Local seed data · cleaner golden-set fixtures |
 | `scripts/test-lib.ts` · `scripts/eval-cleaner.ts` | Offline fixture tests · cleaner safety eval |
@@ -116,7 +116,7 @@ Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Verce
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Read-store access (server-side only) |
 | `SF_INSTANCE_URL` / `SF_CLIENT_ID` / `SF_CLIENT_SECRET` | Connected App OAuth client-credentials for Bulk API reads |
 | `SALESFORCE_INTEGRATION_KEY` | Static bearer the SF case-create automation presents to us |
-| `OPENROUTER_API_KEY` | Cleaner model calls (`anthropic/claude-sonnet-5`) |
+| `AI_GATEWAY_API_KEY` | Optional. Cleaner model calls (`anthropic/claude-sonnet-5`) go through the Vercel AI Gateway; on Vercel the project's OIDC token authenticates, so this is only for local/off-Vercel runs |
 | `RELAY_SYNC_KEY` | Auth for the manual sync POST |
 | `CRON_SECRET` | Vercel Cron sends `Authorization: Bearer $CRON_SECRET` on the GET — without it the scheduled sync 401s |
 | `NEXT_PUBLIC_APP_URL` | Origin used to build tracker URLs (set to the real domain in prod) |
@@ -140,11 +140,11 @@ npm run dev
 ```
 
 Degrades gracefully without creds: no Supabase → the page serves seed fixtures / unknown tokens
-404; no Salesforce/OpenRouter → `/api/sync` errors cleanly and cleaner failures fall back safe.
+404; no Salesforce/Gateway credential → `/api/sync` errors cleanly and cleaner failures fall back safe.
 
 ```bash
 npm run test:lib       # offline fixture tests (CSV parser, status mapping) — no creds needed
-npm run eval:cleaner   # cleaner golden set — needs OPENROUTER_API_KEY; safety gate must flag 5/5
+npm run eval:cleaner   # cleaner golden set — needs VERCEL_OIDC_TOKEN (`vercel env pull`) or AI_GATEWAY_API_KEY; safety gate must flag 5/5
 npm run typecheck
 ```
 
