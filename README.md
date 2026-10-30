@@ -123,7 +123,7 @@ Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Verce
 | Variable | Purpose |
 |---|---|
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Read-store access (server-side only) |
-| `SF_INSTANCE_URL` / `SF_CLIENT_ID` / `SF_CLIENT_SECRET` | Connected App OAuth client-credentials for Bulk API reads |
+| `SF_INSTANCE_URL` / `SF_CLIENT_ID` / `SF_CLIENT_SECRET` | Connected App OAuth client-credentials for Bulk API reads. In production (`VERCEL_ENV=production`) the sync refuses a sandbox host (contains `.sandbox.` or `--`) and records an error instead |
 | `SALESFORCE_INTEGRATION_KEY` | Static bearer the SF case-create automation presents to us |
 | `AI_GATEWAY_API_KEY` | Optional. Cleaner model calls (`anthropic/claude-sonnet-5`) go through the Vercel AI Gateway; on Vercel the project's OIDC token authenticates, so this is only for local/off-Vercel runs |
 | `RELAY_SYNC_KEY` | Auth for the manual sync POST |

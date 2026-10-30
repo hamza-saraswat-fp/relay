@@ -7,6 +7,10 @@ import {
   shouldRetryStatus,
   backoffMs,
   fetchWithRetry,
+  isSandboxHost,
+  assertSalesforceTarget,
+  runBulkQuery,
+  resetSalesforceToken,
   type FetchLike,
 } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
@@ -960,6 +964,53 @@ async function asyncTests() {
       if (savedKey === undefined) delete process.env.RELAY_SYNC_KEY;
       else process.env.RELAY_SYNC_KEY = savedKey;
     }
+  }
+
+  console.log("production-vs-sandbox Salesforce guard:");
+  {
+    const SANDBOX = "https://acme--uat.sandbox.my.salesforce.com";
+    const LEGACY_SANDBOX = "https://acme--uat.my.salesforce.com";
+    const PROD = "https://acme.my.salesforce.com";
+
+    assert(isSandboxHost(SANDBOX), "*.sandbox.my.salesforce.com → sandbox");
+    assert(isSandboxHost(LEGACY_SANDBOX), "--name suffix without .sandbox. → sandbox");
+    assert(isSandboxHost("https://ACME--UAT.SANDBOX.MY.SALESFORCE.COM/"), "case-insensitive");
+    assert(isSandboxHost("acme--uat.sandbox.my.salesforce.com"), "bare host (not a URL) still checked");
+    assert(!isSandboxHost(PROD) && !isSandboxHost(`${PROD}/`), "production My Domain → not sandbox");
+    assert(!isSandboxHost("https://acme.my.salesforce.com/path--x"), "'--' in the path doesn't count, only the host");
+
+    const throws = (url: string, env: string | undefined) => {
+      try {
+        assertSalesforceTarget(url, env);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    assert(throws(SANDBOX, "production"), "production + sandbox host → refuses");
+    assert(throws(LEGACY_SANDBOX, "production"), "production + legacy sandbox host → refuses");
+    assert(!throws(PROD, "production"), "production + production host → allowed");
+    assert(!throws(SANDBOX, "preview"), "preview + sandbox → allowed");
+    assert(!throws(SANDBOX, "development") && !throws(SANDBOX, undefined), "local/unset + sandbox → allowed");
+
+    // Wired into the real path: a production sync against a sandbox fails at the guard, before
+    // it reads the client credentials or makes any request.
+    const saved = { url: process.env.SF_INSTANCE_URL, env: process.env.VERCEL_ENV };
+    resetSalesforceToken();
+    process.env.SF_INSTANCE_URL = SANDBOX;
+    process.env.VERCEL_ENV = "production";
+    let message = "";
+    try {
+      await runBulkQuery("SELECT Id FROM Case LIMIT 1");
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (saved.url === undefined) delete process.env.SF_INSTANCE_URL;
+      else process.env.SF_INSTANCE_URL = saved.url;
+      if (saved.env === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = saved.env;
+    }
+    assert(message.startsWith("Refusing to sync"), "runBulkQuery in production refuses a sandbox URL");
   }
 
   console.log("fetchWithRetry (IAI-460):");
