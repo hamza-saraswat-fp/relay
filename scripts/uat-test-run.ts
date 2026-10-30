@@ -6,7 +6,9 @@
  * human-readable markdown report. Fixes happen in a separate pass after the run.
  *
  * Run:  set -a; . ./.env.local; set +a; npx tsx scripts/uat-test-run.ts
- * Targets: deployed prod app (points at UAT SF) for HTTP/page tests; direct lib calls for sync/cleaner.
+ * Targets: the deployed prod app (BASE) for HTTP/page tests. Its Salesforce org is whatever prod's
+ * SF_INSTANCE_URL names, which should be production Salesforce, not UAT. Direct lib calls for
+ * sync/cleaner use the org in your local env.
  */
 import fs from "node:fs";
 import path from "node:path";
