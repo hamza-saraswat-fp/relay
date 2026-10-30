@@ -1,9 +1,10 @@
 # Relay
 
 Customer-facing support-ticket status pages for FieldPulse — replacing the per-customer Excel
-trackers CS maintained by hand. Every Salesforce Account gets **one permanent, unguessable link**
+trackers CS maintained by hand. Every Salesforce Account gets **one unguessable link**
 (`/t/{token}`) showing its open tech-support tickets, status, and a cleaned "latest update" per
-ticket. Public page, no login; the link itself is the credential.
+ticket. Public page, no login; the link itself is the credential, so it expires when idle and ops
+can replace it (see "Link expiry" and "Rotating a customer link" below).
 
 **Linear:** [Relay project](https://linear.app/fieldpulse/project/relay-e7e7451fa6f8) ·
 **Architecture deep-dive:** `../docs/relay-backend-architecture.md`
@@ -19,7 +20,7 @@ flowchart LR
   end
   subgraph V["Relay app (Vercel)"]
     B["/api/salesforce/case-created"]
-    E["/api/sync — cron every 6 h"]
+    E["/api/sync — cron every 2 h"]
     P["/t/{token} → cookie → /tracker (SSR)"]
   end
   subgraph DB["Supabase"]
@@ -42,7 +43,7 @@ token (**one per account, not per case** — idempotent: the same account always
 and return `{ trackerUrl }`. The SF automation writes that URL to `Relay_Tracker_Link__c` on the
 Account. This is the **only** way an account enters Relay.
 
-**2 · Data refresh (pull, every 6 h).** Vercel Cron calls `/api/sync`, which pulls case statuses +
+**2 · Data refresh (pull, every 2 h).** Vercel Cron calls `/api/sync`, which pulls case statuses +
 each case's newest outbound email via **Salesforce Bulk API 2.0** (submit query job → poll →
 download CSV — deliberately off the org's strained REST quota), runs each update through a Claude
 Sonnet 5 clean + public-safety pass (via the Vercel AI Gateway), and upserts into Supabase. It only queries
@@ -56,6 +57,13 @@ address bar, browser history, client JS, or any analytics payload. Unknown token
 clears the cookie and `/tracker` fails closed with a branded 404 ("click the link again"); so does
 `/tracker` opened directly or after the cookie is cleared. Two links opened in one browser: last
 one wins.
+
+**Link expiry.** A link stops opening once its account's `updated_at` is more than 60 days old
+(`LINK_IDLE_DAYS` / `isLinkExpired` in `lib/tracker-session.ts`, checked on every token lookup).
+The sync refreshes `updated_at` while the account has an open case or one closed in the last 30
+days, so a link dies about **90 days after the account's last case closes**, and the same link
+comes back at the first sync (every 2 h) after a new case opens. An expired link looks exactly
+like an unknown one: the branded 404.
 
 ## Scope invariants — do not relitigate these
 
@@ -75,6 +83,7 @@ one wins.
 | `lib/tracker-session.ts` | Cookie name/attrs + token parsing (pure; covered by `test:lib`) |
 | `app/api/sync/route.ts` | Sync trigger — GET (cron) + POST (manual, 10-min cooldown) |
 | `app/api/salesforce/case-created/route.ts` | New-case webhook: upsert account, mint token, return link |
+| `app/api/ops/rotate-link/route.ts` | Ops-only link replacement: new token for one account, returns the new link |
 | `lib/salesforce.ts` | Bulk API 2.0 client: OAuth client-credentials, job → poll → CSV, RFC-4180 parser |
 | `lib/sync.ts` | Sync orchestration: known-accounts scope, status mapping, clean, upsert |
 | `lib/status.ts` | Raw `Case.Status` → customer chip mapping |
@@ -83,7 +92,7 @@ one wins.
 | `lib/seed.ts` · `lib/fixtures/emails.ts` | Local seed data · cleaner golden-set fixtures |
 | `scripts/test-lib.ts` · `scripts/eval-cleaner.ts` | Offline fixture tests · cleaner safety eval |
 | `supabase/migrations/0001_init.sql` | Schema (apply via Supabase SQL editor or CLI) |
-| `vercel.json` | Registers the 6-hourly cron on deploy |
+| `vercel.json` | Registers the 2-hourly cron on deploy |
 
 ## Data model
 
@@ -130,6 +139,7 @@ Names mirror `.env.example`. Locally: `.env.local` (gitignored). Deployed: Verce
 | `/api/sync` | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` | Manual refresh; 429 if any run started < 10 min ago |
 | `/api/salesforce/case-created` | POST | `Authorization: Bearer $SALESFORCE_INTEGRATION_KEY` | Body `{ "accountId": "001…", "accountName": "…" }` → `{ "trackerUrl": "https://…/t/<token>" }`. Idempotent per account. |
 | `/api/health` | GET | `x-relay-sync-key: $RELAY_SYNC_KEY` | Sync health over `sync_runs` → `{ state, healthy, ageMinutes, lastRun }`. **200 healthy / 503 stale·stuck·error** — point an uptime monitor here. |
+| `/api/ops/rotate-link` | POST | `x-relay-sync-key: $RELAY_SYNC_KEY` | Body `{ "sfAccountId": "001…" }` → `{ "trackerUrl": "https://…/t/<new token>" }`. Replaces the account's token; the old link stops working immediately. 404 if the account isn't tracked. See "Rotating a customer link". |
 
 ## Local development
 
@@ -195,7 +205,7 @@ excludes internal test visits, CS click-throughs from Salesforce, and bots.
 ## Deploy & operations
 
 **Vercel:** root directory `./`, Next.js preset, all env vars above set. The cron registers
-automatically from `vercel.json` (every 6 h). `/api/sync` sets `maxDuration = 300` (requires Pro).
+automatically from `vercel.json` (every 2 h). `/api/sync` sets `maxDuration = 300` (requires Pro).
 
 Manual sync (e.g. before CS shares a link):
 
@@ -219,6 +229,37 @@ from sync_runs order by started_at desc limit 5;
 Known failure modes: OAuth 401 → Connected App client-credentials flow disabled or IP-restricted
 (fix on the SF side); a malformed `sf_account_id` in `accounts` is skipped with a warning rather
 than failing the Bulk query.
+
+### Rotating a customer link
+
+**When:** the link has reached someone it shouldn't (forwarded outside the customer's company,
+posted somewhere public, sent to the wrong account), or the customer asks for a new one. Rotation
+kills the old link, and every browser session opened from it, on their next request. Nothing else
+about the account changes.
+
+1. Copy the Account's 18-character Id from its Salesforce record.
+2. Mint the replacement:
+
+   ```bash
+   curl -s -X POST https://mytickets.fieldpulse.com/api/ops/rotate-link \
+     -H "x-relay-sync-key: $RELAY_SYNC_KEY" -H "Content-Type: application/json" \
+     -d '{"sfAccountId":"001…"}'
+   ```
+
+   It returns `{ "trackerUrl": "https://…/t/<new token>" }`. A 404 means Relay doesn't track that
+   account. Rotating also resets the idle clock, so the new link opens even if the old one had
+   expired.
+3. **Put the new URL into Salesforce by hand.** Relay can't write to Salesforce, and the
+   case-create automation only ever fills a **blank** `Relay_Tracker_Link__c`: the Flow's entry
+   criteria, the invocable Apex and the queueable each skip an Account whose field is already set.
+   So until someone edits the field, the Account keeps showing the dead link, CS agents clicking
+   through from Salesforce land on the 404, and new cases won't fix it. Ask someone with edit access
+   on Account (Saffi or a Salesforce admin) to paste the new URL into **Relay Tracker Link**
+   (Account Details → Account Information).
+   - Alternative: clear the field instead. The next qualifying case on that account calls
+     case-created, which returns the new URL, and the automation writes it. Until that case
+     arrives the field stays blank, so pasting is better.
+4. Send the customer the new link the usual way.
 
 ## Current state — 2026-07-13
 

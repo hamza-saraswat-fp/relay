@@ -42,7 +42,10 @@ import {
   parseTrackerCookie,
   trackerCookieAttrs,
   trackerCookieClearAttrs,
+  trackerUrlFor,
 } from "../lib/tracker-session";
+import { NextRequest } from "next/server";
+import { POST as rotateLink } from "../app/api/ops/rotate-link/route";
 import {
   containsSensitive,
   containsBannedCta,
@@ -726,6 +729,23 @@ console.log("tracker session cookie (token out of the URL):");
   assert(clear.name === TRACKER_COOKIE && clear.path === "/", "clear attrs keep name + path (or the clear fails)");
   assert(clear.value === "" && clear.maxAge === 0, "clear attrs: empty value, maxAge 0");
 
+  const savedAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "https://tickets.example.com/";
+    assert(
+      trackerUrlFor(TOK, "http://internal-host/api/x") === `https://tickets.example.com/t/${TOK}`,
+      "trackerUrlFor uses NEXT_PUBLIC_APP_URL (trailing slash trimmed)",
+    );
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    assert(
+      trackerUrlFor(TOK, "http://localhost:3000/api/x") === `http://localhost:3000/t/${TOK}`,
+      "trackerUrlFor falls back to the request origin",
+    );
+  } finally {
+    if (savedAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = savedAppUrl;
+  }
+
   const seeds = Object.entries(SEED_ACCOUNTS);
   assert(seeds.every(([, a]) => typeof a.accountId === "string" && a.accountId.length > 0), "every seed has an accountId");
   assert(new Set(seeds.map(([, a]) => a.accountId)).size === seeds.length, "seed accountIds are distinct");
@@ -853,6 +873,49 @@ async function asyncTests() {
     );
     assert((await accountIdForToken("00000000-0000-0000-0000-000000000000")) === null, "unknown uuid → null");
     assert((await accountIdForToken("garbage")) === null, "garbage → null");
+  }
+
+  console.log("POST /api/ops/rotate-link auth + validation (no Supabase):");
+  {
+    const KEY = "test-ops-key";
+    const SF_ID = "001Ab00000CdEfGHIJ";
+    const call = (headers: Record<string, string>, body = JSON.stringify({ sfAccountId: SF_ID })) =>
+      rotateLink(
+        new NextRequest("http://localhost/api/ops/rotate-link", { method: "POST", headers, body }),
+      );
+
+    const savedKey = process.env.RELAY_SYNC_KEY;
+    try {
+      delete process.env.RELAY_SYNC_KEY;
+      assert((await call({ "x-relay-sync-key": "" })).status === 401, "RELAY_SYNC_KEY unset → 401 (empty header can't match)");
+      assert((await call({ "x-relay-sync-key": "undefined" })).status === 401, "RELAY_SYNC_KEY unset → 401 for any header");
+
+      process.env.RELAY_SYNC_KEY = KEY;
+      assert((await call({})).status === 401, "no key header → 401");
+      assert((await call({ "x-relay-sync-key": "wrong" })).status === 401, "wrong key → 401");
+      assert((await call({ "x-relay-sync-key": KEY.toUpperCase() })).status === 401, "key is case-sensitive → 401");
+      assert((await call({ "x-relay-sync-key": `${KEY}x` })).status === 401, "key with extra chars → 401");
+      assert((await call({ authorization: `Bearer ${KEY}` })).status === 401, "right key in the wrong header → 401");
+      const denied = await call({ "x-relay-sync-key": "wrong" });
+      assert(!("trackerUrl" in (await denied.json())), "401 body never carries a trackerUrl");
+
+      const ok = { "x-relay-sync-key": KEY };
+      assert((await call(ok, "not json")).status === 400, "authorized + invalid JSON → 400");
+      assert((await call(ok, "{}")).status === 400, "authorized + missing sfAccountId → 400");
+      assert((await call(ok, "null")).status === 400, "authorized + JSON null body → 400");
+      assert((await call(ok, JSON.stringify({ sfAccountId: 42 }))).status === 400, "non-string sfAccountId → 400");
+      assert((await call(ok, JSON.stringify({ sfAccountId: "001'); DROP" }))).status === 400, "malformed sfAccountId → 400");
+
+      // Authorized + valid body reaches the DB; without Supabase it must fail closed, not mint a URL.
+      const realError = console.error;
+      console.error = () => {}; // the route logs the missing-env error; expected here
+      const noDb = await call(ok).finally(() => (console.error = realError));
+      assert(noDb.status === 500, "authorized + valid body, no Supabase → 500");
+      assert(!("trackerUrl" in (await noDb.json())), "failed rotation never returns a trackerUrl");
+    } finally {
+      if (savedKey === undefined) delete process.env.RELAY_SYNC_KEY;
+      else process.env.RELAY_SYNC_KEY = savedKey;
+    }
   }
 
   console.log("fetchWithRetry (IAI-460):");

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse, after } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
 import { runSync } from "@/lib/sync";
 import { onboardingSyncDecision, type SyncRunRow } from "@/lib/health";
+import { trackerUrlFor } from "@/lib/tracker-session";
 
 /**
  * Salesforce case-create → link endpoint (IAI-237).
@@ -10,6 +11,8 @@ import { onboardingSyncDecision, type SyncRunRow } from "@/lib/health";
  * POSTs the account id here (bearer-authenticated). We upsert the account, mint a
  * permanent token if it's new (idempotent — same account always returns the same link),
  * and return the tracker URL; the SF automation writes it to `Relay_Tracker_Link__c`.
+ * Salesforce only calls this while that field is blank, so it never overwrites a link that is
+ * already there (see `/api/ops/rotate-link` for what that means when a link is replaced).
  *
  * We then pull that account's tickets in the background (IAI-474). Without it the link is
  * live but empty: cases only arrived on the 2-hourly cron, so a customer opening the link
@@ -89,6 +92,5 @@ export async function POST(req: NextRequest) {
     console.log(`[relay] case-created: skipping sync (${decision})`);
   }
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? new URL(req.url).origin;
-  return NextResponse.json({ trackerUrl: `${origin}/t/${data.token}` }, { status: 200 });
+  return NextResponse.json({ trackerUrl: trackerUrlFor(data.token as string, req.url) }, { status: 200 });
 }

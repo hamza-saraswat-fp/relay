@@ -43,6 +43,16 @@ export function isLinkExpired(
   return nowMs - updatedMs > days * DAY_MS;
 }
 
+/**
+ * The customer link for a token, as Salesforce stores it in `Relay_Tracker_Link__c`. Shared by
+ * case-created (first link) and ops/rotate-link (replacement), so both hand out the same shape.
+ * Origin: `NEXT_PUBLIC_APP_URL` when set, else the request's own origin.
+ */
+export function trackerUrlFor(token: string, requestUrl: string): string {
+  const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? new URL(requestUrl).origin;
+  return `${origin}/t/${token}`;
+}
+
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(s: unknown): s is string {
