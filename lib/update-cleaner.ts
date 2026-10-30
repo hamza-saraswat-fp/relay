@@ -119,7 +119,9 @@ function buildUserMessage(rawEmail: string, ctx?: CleanContext): string {
  * Returns a short label of what matched, or null if clean.
  */
 const SENSITIVE_PATTERNS: [string, RegExp][] = [
-  ["dollar amount", /\$\s?\d[\d,]*(\.\d{2})?/],
+  // Thousands groups rather than `[\d,]*`, so `scrubSensitive` doesn't eat a trailing comma
+  // ("$75, then…"). Detection is unchanged: both forms match wherever `$` precedes a digit.
+  ["dollar amount", /\$\s?\d+(?:,\d{3})*(?:\.\d{2})?/],
   ["email address", /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/],
   ["phone number", /\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/],
 ];
@@ -129,6 +131,21 @@ export function containsSensitive(text: string): string | null {
     if (re.test(text)) return label;
   }
   return null;
+}
+
+/** What a scrubbed match renders as. */
+export const SCRUB_MASK = "[hidden]";
+
+/** SENSITIVE_PATTERNS with the global flag, so every occurrence is replaced, not just the first. */
+const SCRUB_PATTERNS = SENSITIVE_PATTERNS.map(([, re]) => new RegExp(re.source, `${re.flags}g`));
+
+/**
+ * Render-time mask for Salesforce text that never passes through the cleaner: case subjects and
+ * account names. Same patterns as `containsSensitive`, but these fields have no fallback line to
+ * swap in, so each match is masked in place and the rest of the text survives. Pure.
+ */
+export function scrubSensitive(text: string): string {
+  return SCRUB_PATTERNS.reduce((out, re) => out.replace(re, SCRUB_MASK), text);
 }
 
 /**

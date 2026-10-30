@@ -7,6 +7,10 @@ import {
   shouldRetryStatus,
   backoffMs,
   fetchWithRetry,
+  isSandboxHost,
+  assertSalesforceTarget,
+  runBulkQuery,
+  resetSalesforceToken,
   type FetchLike,
 } from "../lib/salesforce";
 import { statusToChip } from "../lib/status";
@@ -36,13 +40,20 @@ import { ENTRY_VALUES, clampDays, deviceClass, parseViewBody, recordPageView } f
 import {
   TRACKER_COOKIE,
   TRACKER_COOKIE_MAX_AGE_S,
+  LINK_IDLE_DAYS,
+  isLinkExpired,
   isUuid,
   parseTrackerCookie,
   trackerCookieAttrs,
   trackerCookieClearAttrs,
+  trackerUrlFor,
 } from "../lib/tracker-session";
+import { NextRequest } from "next/server";
+import { POST as rotateLink } from "../app/api/ops/rotate-link/route";
 import {
   containsSensitive,
+  scrubSensitive,
+  SCRUB_MASK,
   containsBannedCta,
   normalizeDashes,
   latestMessageOnly,
@@ -196,6 +207,48 @@ console.log("containsSensitive scrubber (IAI-316):");
   assert(containsSensitive("Fixed in version 3.2.1 of the mobile app.") === null, "version strings OK");
   assert(containsSensitive("We're actively working on this ticket.") === null, "plain updates OK");
   assert(containsSensitive("Payment #4187 wasn't syncing due to a small mismatch.") === null, "payment ref OK");
+}
+
+console.log("scrubSensitive render-time mask (case subjects + account names):");
+{
+  const M = SCRUB_MASK;
+  // Subjects: mask the match, keep the rest readable.
+  assert(scrubSensitive("Refund of $2,453.00 not applied") === `Refund of ${M} not applied`, "subject: dollar amount masked");
+  assert(scrubSensitive("Charged $18.40 twice") === `Charged ${M} twice`, "subject: cents amount masked");
+  assert(
+    scrubSensitive("Customer jane.doe+billing@acme-co.com can't log in") === `Customer ${M} can't log in`,
+    "subject: email address masked",
+  );
+  assert(scrubSensitive("Callback requested: (480) 555-0199") === `Callback requested: ${M}`, "subject: (xxx) phone masked");
+  assert(scrubSensitive("Call 469.382.5668 re: sync") === `Call ${M} re: sync`, "subject: dotted phone masked");
+  assert(
+    scrubSensitive("Paid $50 and $75, call 480-555-0199 or ops@example.com") ===
+      `Paid ${M} and ${M}, call ${M} or ${M}`,
+    "subject: every occurrence of every pattern masked, not just the first",
+  );
+  // Account names.
+  assert(scrubSensitive("Joe's Plumbing 480-555-0199") === `Joe's Plumbing ${M}`, "account name: phone masked");
+  assert(scrubSensitive("billing@bluebird.example") === M, "account name that is just an email → fully masked");
+  // Negatives: ordinary subjects and names pass through untouched.
+  for (const clean of [
+    "Invoice #70593 not syncing to QuickBooks",
+    "Fixed in version 3.2.1 of the mobile app",
+    "Arrival window time changes after saving a job",
+    "Bluebird Plumbing & Air",
+    "A-1 Heating (Phoenix)",
+    "24/7 Mechanical LLC",
+    "(unknown)",
+    "",
+  ]) {
+    assert(scrubSensitive(clean) === clean, `untouched: "${clean}"`);
+  }
+  // Agrees with the detector: a scrubbed string never trips containsSensitive.
+  assert(
+    containsSensitive(scrubSensitive("Paid $50, call 480-555-0199 or ops@example.com")) === null,
+    "scrubbed output passes containsSensitive",
+  );
+  // Stateless across calls (global regexes keep lastIndex; replace must not leak it).
+  assert(scrubSensitive("$10") === M && scrubSensitive("$10") === M, "repeat calls give the same result");
 }
 
 console.log("latestMessageOnly quoted-thread truncation (IAI-317):");
@@ -724,10 +777,52 @@ console.log("tracker session cookie (token out of the URL):");
   assert(clear.name === TRACKER_COOKIE && clear.path === "/", "clear attrs keep name + path (or the clear fails)");
   assert(clear.value === "" && clear.maxAge === 0, "clear attrs: empty value, maxAge 0");
 
+  const savedAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "https://tickets.example.com/";
+    assert(
+      trackerUrlFor(TOK, "http://internal-host/api/x") === `https://tickets.example.com/t/${TOK}`,
+      "trackerUrlFor uses NEXT_PUBLIC_APP_URL (trailing slash trimmed)",
+    );
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    assert(
+      trackerUrlFor(TOK, "http://localhost:3000/api/x") === `http://localhost:3000/t/${TOK}`,
+      "trackerUrlFor falls back to the request origin",
+    );
+  } finally {
+    if (savedAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = savedAppUrl;
+  }
+
   const seeds = Object.entries(SEED_ACCOUNTS);
   assert(seeds.every(([, a]) => typeof a.accountId === "string" && a.accountId.length > 0), "every seed has an accountId");
   assert(new Set(seeds.map(([, a]) => a.accountId)).size === seeds.length, "seed accountIds are distinct");
   assert(seeds.every(([tok, a]) => a.accountId !== tok), "seed accountId is never the token");
+}
+
+console.log("isLinkExpired idle-link expiry:");
+{
+  const DAY = 24 * 60 * 60 * 1000;
+  const updated = "2026-07-01T12:00:00.000Z";
+  const t0 = new Date(updated).getTime();
+
+  assert(LINK_IDLE_DAYS === 60, "default idle window is 60 days");
+  assert(!isLinkExpired(updated, t0), "just updated → open");
+  assert(!isLinkExpired(updated, t0 + 59 * DAY), "59 days idle → open");
+  assert(!isLinkExpired(updated, t0 + 60 * DAY), "exactly 60 days idle → still open (boundary)");
+  assert(isLinkExpired(updated, t0 + 60 * DAY + 1), "60 days + 1 ms → expired (boundary)");
+  assert(isLinkExpired(updated, t0 + 365 * DAY), "a year idle → expired");
+  assert(!isLinkExpired(updated, t0 - 5 * DAY), "updated_at in the future (clock skew) → open");
+  assert(isLinkExpired("not a date", t0) && isLinkExpired("", t0), "unparseable updated_at → fails closed");
+  // PostgREST serializes as `+00:00`, not `Z` — must parse the same instant.
+  assert(!isLinkExpired("2026-07-01T12:00:00+00:00", t0 + 60 * DAY), "PostgREST +00:00 format parses");
+  assert(isLinkExpired("2026-07-01T12:00:00+00:00", t0 + 60 * DAY + 1), "PostgREST +00:00 format expires on time");
+  assert(!isLinkExpired(updated, t0 + 7 * DAY, 7) && isLinkExpired(updated, t0 + 7 * DAY + 1, 7), "custom window honored");
+  // The README's ~90-day claim: sync keeps updated_at fresh until 30 days after the last case closes.
+  const lastClose = t0;
+  const lastSyncTouch = lastClose + 30 * DAY;
+  assert(!isLinkExpired(new Date(lastSyncTouch).toISOString(), lastClose + 90 * DAY), "open on day 90 after last close");
+  assert(isLinkExpired(new Date(lastSyncTouch).toISOString(), lastClose + 91 * DAY), "expired by day 91 after last close");
 }
 
 console.log("Clarity analytics helpers (usage tracking):");
@@ -826,6 +921,96 @@ async function asyncTests() {
     );
     assert((await accountIdForToken("00000000-0000-0000-0000-000000000000")) === null, "unknown uuid → null");
     assert((await accountIdForToken("garbage")) === null, "garbage → null");
+  }
+
+  console.log("POST /api/ops/rotate-link auth + validation (no Supabase):");
+  {
+    const KEY = "test-ops-key";
+    const SF_ID = "001Ab00000CdEfGHIJ";
+    const call = (headers: Record<string, string>, body = JSON.stringify({ sfAccountId: SF_ID })) =>
+      rotateLink(
+        new NextRequest("http://localhost/api/ops/rotate-link", { method: "POST", headers, body }),
+      );
+
+    const savedKey = process.env.RELAY_SYNC_KEY;
+    try {
+      delete process.env.RELAY_SYNC_KEY;
+      assert((await call({ "x-relay-sync-key": "" })).status === 401, "RELAY_SYNC_KEY unset → 401 (empty header can't match)");
+      assert((await call({ "x-relay-sync-key": "undefined" })).status === 401, "RELAY_SYNC_KEY unset → 401 for any header");
+
+      process.env.RELAY_SYNC_KEY = KEY;
+      assert((await call({})).status === 401, "no key header → 401");
+      assert((await call({ "x-relay-sync-key": "wrong" })).status === 401, "wrong key → 401");
+      assert((await call({ "x-relay-sync-key": KEY.toUpperCase() })).status === 401, "key is case-sensitive → 401");
+      assert((await call({ "x-relay-sync-key": `${KEY}x` })).status === 401, "key with extra chars → 401");
+      assert((await call({ authorization: `Bearer ${KEY}` })).status === 401, "right key in the wrong header → 401");
+      const denied = await call({ "x-relay-sync-key": "wrong" });
+      assert(!("trackerUrl" in (await denied.json())), "401 body never carries a trackerUrl");
+
+      const ok = { "x-relay-sync-key": KEY };
+      assert((await call(ok, "not json")).status === 400, "authorized + invalid JSON → 400");
+      assert((await call(ok, "{}")).status === 400, "authorized + missing sfAccountId → 400");
+      assert((await call(ok, "null")).status === 400, "authorized + JSON null body → 400");
+      assert((await call(ok, JSON.stringify({ sfAccountId: 42 }))).status === 400, "non-string sfAccountId → 400");
+      assert((await call(ok, JSON.stringify({ sfAccountId: "001'); DROP" }))).status === 400, "malformed sfAccountId → 400");
+
+      // Authorized + valid body reaches the DB; without Supabase it must fail closed, not mint a URL.
+      const realError = console.error;
+      console.error = () => {}; // the route logs the missing-env error; expected here
+      const noDb = await call(ok).finally(() => (console.error = realError));
+      assert(noDb.status === 500, "authorized + valid body, no Supabase → 500");
+      assert(!("trackerUrl" in (await noDb.json())), "failed rotation never returns a trackerUrl");
+    } finally {
+      if (savedKey === undefined) delete process.env.RELAY_SYNC_KEY;
+      else process.env.RELAY_SYNC_KEY = savedKey;
+    }
+  }
+
+  console.log("production-vs-sandbox Salesforce guard:");
+  {
+    const SANDBOX = "https://acme--uat.sandbox.my.salesforce.com";
+    const LEGACY_SANDBOX = "https://acme--uat.my.salesforce.com";
+    const PROD = "https://acme.my.salesforce.com";
+
+    assert(isSandboxHost(SANDBOX), "*.sandbox.my.salesforce.com → sandbox");
+    assert(isSandboxHost(LEGACY_SANDBOX), "--name suffix without .sandbox. → sandbox");
+    assert(isSandboxHost("https://ACME--UAT.SANDBOX.MY.SALESFORCE.COM/"), "case-insensitive");
+    assert(isSandboxHost("acme--uat.sandbox.my.salesforce.com"), "bare host (not a URL) still checked");
+    assert(!isSandboxHost(PROD) && !isSandboxHost(`${PROD}/`), "production My Domain → not sandbox");
+    assert(!isSandboxHost("https://acme.my.salesforce.com/path--x"), "'--' in the path doesn't count, only the host");
+
+    const throws = (url: string, env: string | undefined) => {
+      try {
+        assertSalesforceTarget(url, env);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    assert(throws(SANDBOX, "production"), "production + sandbox host → refuses");
+    assert(throws(LEGACY_SANDBOX, "production"), "production + legacy sandbox host → refuses");
+    assert(!throws(PROD, "production"), "production + production host → allowed");
+    assert(!throws(SANDBOX, "preview"), "preview + sandbox → allowed");
+    assert(!throws(SANDBOX, "development") && !throws(SANDBOX, undefined), "local/unset + sandbox → allowed");
+
+    // Wired into the real path: a production sync against a sandbox fails at the guard, before
+    // it reads the client credentials or makes any request.
+    const saved = { url: process.env.SF_INSTANCE_URL, env: process.env.VERCEL_ENV };
+    resetSalesforceToken();
+    process.env.SF_INSTANCE_URL = SANDBOX;
+    process.env.VERCEL_ENV = "production";
+    let message = "";
+    try {
+      await runBulkQuery("SELECT Id FROM Case LIMIT 1");
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    } finally {
+      if (saved.url === undefined) delete process.env.SF_INSTANCE_URL;
+      else process.env.SF_INSTANCE_URL = saved.url;
+      if (saved.env === undefined) delete process.env.VERCEL_ENV;
+      else process.env.VERCEL_ENV = saved.env;
+    }
+    assert(message.startsWith("Refusing to sync"), "runBulkQuery in production refuses a sandbox URL");
   }
 
   console.log("fetchWithRetry (IAI-460):");

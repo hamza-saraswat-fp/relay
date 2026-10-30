@@ -132,6 +132,36 @@ export async function fetchWithRetry(
 }
 
 /**
+ * Does this Salesforce URL point at a sandbox? Sandbox My Domain hosts carry `.sandbox.`
+ * (`acme--uat.sandbox.my.salesforce.com`) or the `--<sandbox name>` suffix (older
+ * `acme--uat.my.salesforce.com` hosts). Production hosts carry neither. Pure.
+ */
+export function isSandboxHost(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    host = url.toLowerCase();
+  }
+  return host.includes(".sandbox.") || host.includes("--");
+}
+
+/**
+ * Refuse to sync a production deployment from a Salesforce sandbox. Prod would otherwise serve
+ * sandbox cases on customer pages and never see real ones, with every sync reporting "ok". Preview
+ * and local runs (`VERCEL_ENV` is "preview" or unset) may still point at a sandbox. Throws, so the
+ * sync records an error and alerts instead of running.
+ */
+export function assertSalesforceTarget(url: string, vercelEnv: string | undefined): void {
+  if (vercelEnv === "production" && isSandboxHost(url)) {
+    throw new Error(
+      "Refusing to sync: this production deployment's Salesforce URL is a sandbox " +
+        "(host contains '.sandbox.' or '--'). Point SF_INSTANCE_URL at the production org.",
+    );
+  }
+}
+
+/**
  * Cached bearer token. The cache is now time-boxed (IAI-460): it previously lived for the whole
  * lifetime of a warm serverless instance with no expiry check, so once Salesforce expired the
  * token every subsequent call would 401 forever with no recovery path.
@@ -140,6 +170,8 @@ async function getToken(force = false): Promise<Token> {
   if (!force && cached && Date.now() - cached.fetchedAt < TOKEN_TTL_MS) return cached;
 
   const instanceUrl = requireEnv("SF_INSTANCE_URL").replace(/\/+$/, "");
+  // Before any request, so a misconfigured prod never even authenticates against the sandbox.
+  assertSalesforceTarget(instanceUrl, process.env.VERCEL_ENV);
   const body = new URLSearchParams({
     grant_type: "client_credentials",
     client_id: requireEnv("SF_CLIENT_ID"),
@@ -158,9 +190,12 @@ async function getToken(force = false): Promise<Token> {
     throw new Error(`Salesforce auth failed: ${res.status} ${await res.text()}`);
   }
   const json = (await res.json()) as { access_token: string; instance_url?: string };
+  const resolvedUrl = (json.instance_url ?? instanceUrl).replace(/\/+$/, "");
+  // Bulk calls go to the instance Salesforce hands back, so check that one too.
+  assertSalesforceTarget(resolvedUrl, process.env.VERCEL_ENV);
   cached = {
     accessToken: json.access_token,
-    instanceUrl: (json.instance_url ?? instanceUrl).replace(/\/+$/, ""),
+    instanceUrl: resolvedUrl,
     fetchedAt: Date.now(),
   };
   return cached;

@@ -1,7 +1,7 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
-import { UUID_RE } from "./tracker-session";
-import { SAFE_FALLBACK } from "./update-cleaner";
+import { UUID_RE, isLinkExpired } from "./tracker-session";
+import { SAFE_FALLBACK, scrubSensitive } from "./update-cleaner";
 
 /**
  * Single data-access seam for the customer page. Reads live Supabase when
@@ -18,8 +18,9 @@ export async function getAccountView(token: string): Promise<AccountView | null>
 }
 
 /**
- * Resolve a page token to the tracked account's id, or null for anything unrecognized.
- * Shared by the `/t/[token]` entry route and `/api/refresh`. Seed-aware like `getAccountView`.
+ * Resolve a page token to the tracked account's id, or null for anything unrecognized or expired
+ * (`isLinkExpired`). Shared by the `/t/[token]` entry route, `/api/refresh` and `/api/view`.
+ * Seed-aware like `getAccountView`; seed links never expire.
  */
 export async function accountIdForToken(token: string): Promise<string | null> {
   if (!UUID_RE.test(token)) return null;
@@ -27,10 +28,11 @@ export async function accountIdForToken(token: string): Promise<string | null> {
   const { getServiceClient } = await import("./supabase");
   const { data, error } = await getServiceClient()
     .from("accounts")
-    .select("id")
+    .select("id, updated_at")
     .eq("token", token)
     .maybeSingle();
   if (error || !data) return null;
+  if (isLinkExpired(data.updated_at as string)) return null;
   return data.id as string;
 }
 
@@ -46,7 +48,8 @@ async function getAccountViewFromSupabase(
     .eq("token", token)
     .maybeSingle();
   if (error) throw error;
-  if (!account) return null;
+  // Expired renders exactly like unknown: the page's branded 404, never a hint the token existed.
+  if (!account || isLinkExpired(account.updated_at as string)) return null;
 
   const { data: rows, error: caseErr } = await supabase
     .from("cases")
@@ -60,7 +63,9 @@ async function getAccountViewFromSupabase(
     const upd = Array.isArray(r.case_updates) ? r.case_updates[0] : r.case_updates;
     const chip = r.status_chip as StatusChip;
     return {
-      subject: r.subject as string,
+      // Subjects and names come straight from Salesforce, never through the cleaner: mask
+      // dollar amounts, emails and phone numbers at render.
+      subject: scrubSensitive(r.subject as string),
       chip,
       openedISO: r.created_date as string,
       lastActivityISO: r.last_modified as string,
@@ -71,7 +76,7 @@ async function getAccountViewFromSupabase(
 
   return {
     accountId: account.id as string,
-    name: account.name as string,
+    name: scrubSensitive(account.name as string),
     lastUpdatedISO: account.updated_at as string,
     tickets,
   };
