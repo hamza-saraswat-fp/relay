@@ -36,6 +36,8 @@ import { ENTRY_VALUES, clampDays, deviceClass, parseViewBody, recordPageView } f
 import {
   TRACKER_COOKIE,
   TRACKER_COOKIE_MAX_AGE_S,
+  LINK_IDLE_DAYS,
+  isLinkExpired,
   isUuid,
   parseTrackerCookie,
   trackerCookieAttrs,
@@ -728,6 +730,31 @@ console.log("tracker session cookie (token out of the URL):");
   assert(seeds.every(([, a]) => typeof a.accountId === "string" && a.accountId.length > 0), "every seed has an accountId");
   assert(new Set(seeds.map(([, a]) => a.accountId)).size === seeds.length, "seed accountIds are distinct");
   assert(seeds.every(([tok, a]) => a.accountId !== tok), "seed accountId is never the token");
+}
+
+console.log("isLinkExpired idle-link expiry:");
+{
+  const DAY = 24 * 60 * 60 * 1000;
+  const updated = "2026-07-01T12:00:00.000Z";
+  const t0 = new Date(updated).getTime();
+
+  assert(LINK_IDLE_DAYS === 60, "default idle window is 60 days");
+  assert(!isLinkExpired(updated, t0), "just updated → open");
+  assert(!isLinkExpired(updated, t0 + 59 * DAY), "59 days idle → open");
+  assert(!isLinkExpired(updated, t0 + 60 * DAY), "exactly 60 days idle → still open (boundary)");
+  assert(isLinkExpired(updated, t0 + 60 * DAY + 1), "60 days + 1 ms → expired (boundary)");
+  assert(isLinkExpired(updated, t0 + 365 * DAY), "a year idle → expired");
+  assert(!isLinkExpired(updated, t0 - 5 * DAY), "updated_at in the future (clock skew) → open");
+  assert(isLinkExpired("not a date", t0) && isLinkExpired("", t0), "unparseable updated_at → fails closed");
+  // PostgREST serializes as `+00:00`, not `Z` — must parse the same instant.
+  assert(!isLinkExpired("2026-07-01T12:00:00+00:00", t0 + 60 * DAY), "PostgREST +00:00 format parses");
+  assert(isLinkExpired("2026-07-01T12:00:00+00:00", t0 + 60 * DAY + 1), "PostgREST +00:00 format expires on time");
+  assert(!isLinkExpired(updated, t0 + 7 * DAY, 7) && isLinkExpired(updated, t0 + 7 * DAY + 1, 7), "custom window honored");
+  // The README's ~90-day claim: sync keeps updated_at fresh until 30 days after the last case closes.
+  const lastClose = t0;
+  const lastSyncTouch = lastClose + 30 * DAY;
+  assert(!isLinkExpired(new Date(lastSyncTouch).toISOString(), lastClose + 90 * DAY), "open on day 90 after last close");
+  assert(isLinkExpired(new Date(lastSyncTouch).toISOString(), lastClose + 91 * DAY), "expired by day 91 after last close");
 }
 
 console.log("Clarity analytics helpers (usage tracking):");

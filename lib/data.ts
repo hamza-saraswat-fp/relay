@@ -1,6 +1,6 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
-import { UUID_RE } from "./tracker-session";
+import { UUID_RE, isLinkExpired } from "./tracker-session";
 import { SAFE_FALLBACK } from "./update-cleaner";
 
 /**
@@ -18,8 +18,9 @@ export async function getAccountView(token: string): Promise<AccountView | null>
 }
 
 /**
- * Resolve a page token to the tracked account's id, or null for anything unrecognized.
- * Shared by the `/t/[token]` entry route and `/api/refresh`. Seed-aware like `getAccountView`.
+ * Resolve a page token to the tracked account's id, or null for anything unrecognized or expired
+ * (`isLinkExpired`). Shared by the `/t/[token]` entry route, `/api/refresh` and `/api/view`.
+ * Seed-aware like `getAccountView`; seed links never expire.
  */
 export async function accountIdForToken(token: string): Promise<string | null> {
   if (!UUID_RE.test(token)) return null;
@@ -27,10 +28,11 @@ export async function accountIdForToken(token: string): Promise<string | null> {
   const { getServiceClient } = await import("./supabase");
   const { data, error } = await getServiceClient()
     .from("accounts")
-    .select("id")
+    .select("id, updated_at")
     .eq("token", token)
     .maybeSingle();
   if (error || !data) return null;
+  if (isLinkExpired(data.updated_at as string)) return null;
   return data.id as string;
 }
 
@@ -46,7 +48,8 @@ async function getAccountViewFromSupabase(
     .eq("token", token)
     .maybeSingle();
   if (error) throw error;
-  if (!account) return null;
+  // Expired renders exactly like unknown: the page's branded 404, never a hint the token existed.
+  if (!account || isLinkExpired(account.updated_at as string)) return null;
 
   const { data: rows, error: caseErr } = await supabase
     .from("cases")

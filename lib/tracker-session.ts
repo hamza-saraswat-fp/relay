@@ -16,6 +16,33 @@ export const TRACKER_COOKIE = "relay_tracker";
 /** One year. Re-issued on every pass through `/t/{token}`, so an active customer never expires. */
 export const TRACKER_COOKIE_MAX_AGE_S = 60 * 60 * 24 * 365;
 
+/**
+ * A link stops opening once its account has been idle this long. "Idle" is `accounts.updated_at`,
+ * which the sync refreshes on every run while the account has an open case or one closed in the
+ * last 30 days. So a link dies roughly 90 days after the account's last case closes, and comes back
+ * (same token) at the first sync after a new case opens. It is the sync, not case-created, that
+ * revives it: Salesforce only calls case-created while the account's link field is blank. A
+ * forwarded or leaked link therefore stops working once the customer no longer needs it.
+ */
+export const LINK_IDLE_DAYS = 60;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Has this account's link expired? Pure. Expired once MORE than `days` have passed since
+ * `updatedAtIso` (exactly `days` still opens). An unparseable timestamp fails closed; a future
+ * one (clock skew) counts as fresh.
+ */
+export function isLinkExpired(
+  updatedAtIso: string,
+  nowMs: number = Date.now(),
+  days: number = LINK_IDLE_DAYS,
+): boolean {
+  const updatedMs = new Date(updatedAtIso).getTime();
+  if (Number.isNaN(updatedMs)) return true;
+  return nowMs - updatedMs > days * DAY_MS;
+}
+
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isUuid(s: unknown): s is string {
