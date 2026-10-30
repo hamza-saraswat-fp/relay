@@ -48,6 +48,8 @@ import { NextRequest } from "next/server";
 import { POST as rotateLink } from "../app/api/ops/rotate-link/route";
 import {
   containsSensitive,
+  scrubSensitive,
+  SCRUB_MASK,
   containsBannedCta,
   normalizeDashes,
   latestMessageOnly,
@@ -201,6 +203,48 @@ console.log("containsSensitive scrubber (IAI-316):");
   assert(containsSensitive("Fixed in version 3.2.1 of the mobile app.") === null, "version strings OK");
   assert(containsSensitive("We're actively working on this ticket.") === null, "plain updates OK");
   assert(containsSensitive("Payment #4187 wasn't syncing due to a small mismatch.") === null, "payment ref OK");
+}
+
+console.log("scrubSensitive render-time mask (case subjects + account names):");
+{
+  const M = SCRUB_MASK;
+  // Subjects: mask the match, keep the rest readable.
+  assert(scrubSensitive("Refund of $2,453.00 not applied") === `Refund of ${M} not applied`, "subject: dollar amount masked");
+  assert(scrubSensitive("Charged $18.40 twice") === `Charged ${M} twice`, "subject: cents amount masked");
+  assert(
+    scrubSensitive("Customer jane.doe+billing@acme-co.com can't log in") === `Customer ${M} can't log in`,
+    "subject: email address masked",
+  );
+  assert(scrubSensitive("Callback requested: (480) 555-0199") === `Callback requested: ${M}`, "subject: (xxx) phone masked");
+  assert(scrubSensitive("Call 469.382.5668 re: sync") === `Call ${M} re: sync`, "subject: dotted phone masked");
+  assert(
+    scrubSensitive("Paid $50 and $75, call 480-555-0199 or ops@example.com") ===
+      `Paid ${M} and ${M}, call ${M} or ${M}`,
+    "subject: every occurrence of every pattern masked, not just the first",
+  );
+  // Account names.
+  assert(scrubSensitive("Joe's Plumbing 480-555-0199") === `Joe's Plumbing ${M}`, "account name: phone masked");
+  assert(scrubSensitive("billing@bluebird.example") === M, "account name that is just an email → fully masked");
+  // Negatives: ordinary subjects and names pass through untouched.
+  for (const clean of [
+    "Invoice #70593 not syncing to QuickBooks",
+    "Fixed in version 3.2.1 of the mobile app",
+    "Arrival window time changes after saving a job",
+    "Bluebird Plumbing & Air",
+    "A-1 Heating (Phoenix)",
+    "24/7 Mechanical LLC",
+    "(unknown)",
+    "",
+  ]) {
+    assert(scrubSensitive(clean) === clean, `untouched: "${clean}"`);
+  }
+  // Agrees with the detector: a scrubbed string never trips containsSensitive.
+  assert(
+    containsSensitive(scrubSensitive("Paid $50, call 480-555-0199 or ops@example.com")) === null,
+    "scrubbed output passes containsSensitive",
+  );
+  // Stateless across calls (global regexes keep lastIndex; replace must not leak it).
+  assert(scrubSensitive("$10") === M && scrubSensitive("$10") === M, "repeat calls give the same result");
 }
 
 console.log("latestMessageOnly quoted-thread truncation (IAI-317):");

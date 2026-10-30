@@ -1,7 +1,7 @@
 import type { AccountView, StatusChip, Ticket } from "./types";
 import { SEED_ACCOUNTS } from "./seed";
 import { UUID_RE, isLinkExpired } from "./tracker-session";
-import { SAFE_FALLBACK } from "./update-cleaner";
+import { SAFE_FALLBACK, scrubSensitive } from "./update-cleaner";
 
 /**
  * Single data-access seam for the customer page. Reads live Supabase when
@@ -63,7 +63,9 @@ async function getAccountViewFromSupabase(
     const upd = Array.isArray(r.case_updates) ? r.case_updates[0] : r.case_updates;
     const chip = r.status_chip as StatusChip;
     return {
-      subject: r.subject as string,
+      // Subjects and names come straight from Salesforce, never through the cleaner: mask
+      // dollar amounts, emails and phone numbers at render.
+      subject: scrubSensitive(r.subject as string),
       chip,
       openedISO: r.created_date as string,
       lastActivityISO: r.last_modified as string,
@@ -74,7 +76,7 @@ async function getAccountViewFromSupabase(
 
   return {
     accountId: account.id as string,
-    name: account.name as string,
+    name: scrubSensitive(account.name as string),
     lastUpdatedISO: account.updated_at as string,
     tickets,
   };
